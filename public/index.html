@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overthrow Game</title>
+</head>
+<body>
+  <h2>Overthrow Game</h2>
+  <button onclick="createRoom()">Create Room</button>
+  <p id="roomDisplay"></p>
+
+  <h3>Join a Room</h3>
+  <input id="roomInput" type="text" placeholder="Enter room code">
+  <button onclick="joinRoom()">Join Room</button>
+
+  <ul id="players"></ul>
+
+  <!-- Load Socket.IO client -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <script>
+    const socket = io();
+
+    socket.on('connect', () => {
+      document.body.insertAdjacentHTML('beforeend', `<p>Connected! Your ID: ${socket.id}</p>`);
+    });
+
+    function createRoom() {
+      socket.emit('createRoom');
+    }
+
+    function joinRoom() {
+      const roomName = document.getElementById('roomInput').value;
+      socket.emit('joinRoom', roomName);
+    }
+
+    socket.on('roomCreated', (roomId) => {
+      document.getElementById('roomDisplay').innerText = `Room ID: ${roomId} (share this with friends!)`;
+    });
+
+    socket.on('roomUpdate', (players) => {
+      const list = document.getElementById('players');
+      list.innerHTML = '';
+      players.forEach((id) => {
+        const li = document.createElement('li');
+        li.textContent = id;
+        list.appendChild(li);
+      });
+    });
+
+    socket.on('errorMessage', (msg) => {
+      alert(msg);
+    });
+  </script>
+</body>
+</html>
