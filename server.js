@@ -6,60 +6,73 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-let rooms = {}; // Track rooms and players
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
 
-//Serve static files
-app.use(express.static(__dirname + '/public'));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+
+const rooms = {}; // { roomId: { players: [] } }
+
+function generateRoomId() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
 
 io.on('connection', (socket) => {
-    console.log(`Player connected: ${socket.id}`);
+  console.log(`User connected: ${socket.id}`);
 
-    // Create a room
-    socket.on('createRoom', () => {
-        const roomId = Math.random().toString(36).substr(2, 6).toUpperCase(); // e.g., "AB12CD"
-        socket.join(roomId);
+  let currentRoom = null;
 
-        if (!rooms[roomId]) rooms[roomId] = [];
-        rooms[roomId].push(socket.id);
+  socket.on('createRoom', () => {
+    const roomId = generateRoomId();
+    rooms[roomId] = { players: [socket.id] };
+    currentRoom = roomId;
+    socket.join(roomId);
+    socket.emit('roomCreated', roomId);
+    io.to(roomId).emit('roomUpdate', rooms[roomId].players);
+  });
 
-        console.log(`Room ${roomId} created by ${socket.id}`);
-        socket.emit('roomCreated', roomId);
-        io.to(roomId).emit('roomUpdate', rooms[roomId]);
-    });
+  socket.on('joinRoom', (roomId) => {
+    if (!rooms[roomId]) {
+      socket.emit('errorMessage', 'Room does not exist!');
+      return;
+    }
+    rooms[roomId].players.push(socket.id);
+    currentRoom = roomId;
+    socket.join(roomId);
+    io.to(roomId).emit('roomUpdate', rooms[roomId].players);
+  });
 
-    // Join a room
-    socket.on('joinRoom', (roomName) => {
-        if (!rooms[roomName]) {
-            socket.emit('errorMessage', 'Room does not exist.');
-            return;
-        }
-        socket.join(roomName);
-        rooms[roomName].push(socket.id);
+  socket.on('leaveRoom', (roomId) => {
+    leaveRoom(socket, roomId);
+  });
 
-        console.log(`Player ${socket.id} joined room ${roomName}`);
-        io.to(roomName).emit('roomUpdate', rooms[roomName]);
-    });
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
+    if (currentRoom) {
+      leaveRoom(socket, currentRoom);
+    }
+  });
 
-    // Handle disconnect
-    socket.on('disconnect', () => {
-        console.log(`Player disconnected: ${socket.id}`);
+  function leaveRoom(socket, roomId) {
+    if (!rooms[roomId]) return;
 
-        for (const room in rooms) {
-            // Remove player from room
-            rooms[room] = rooms[room].filter(id => id !== socket.id);
+    // Remove player
+    rooms[roomId].players = rooms[roomId].players.filter(id => id !== socket.id);
+    socket.leave(roomId);
 
-            // 🔹 Automatically clean up empty rooms
-            if (rooms[room].length === 0) {
-                delete rooms[room];
-                console.log(`Room ${room} deleted (empty)`);
-            } else {
-                // Update other players in that room
-                io.to(room).emit('roomUpdate', rooms[room]);
-            }
-        }
-    });
+    // If empty, delete room
+    if (rooms[roomId].players.length === 0) {
+      delete rooms[roomId];
+      console.log(`Room ${roomId} deleted (empty).`);
+    } else {
+      io.to(roomId).emit('roomUpdate', rooms[roomId].players);
+    }
+  }
 });
 
 server.listen(3000, () => {
-    console.log('Server running on port 3000');
+  console.log('Server running on port 3000');
 });

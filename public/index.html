@@ -7,39 +7,63 @@
 </head>
 <body>
   <h2>Overthrow Game</h2>
-  <button onclick="createRoom()">Create Room</button>
-  <p id="roomDisplay"></p>
 
-  <h3>Join a Room</h3>
-  <input id="roomInput" type="text" placeholder="Enter room code">
-  <button onclick="joinRoom()">Join Room</button>
+  <div id="lobby">
+    <button onclick="createRoom()">Create Room</button>
+    
+    <h3>Join a Room</h3>
+    <input id="roomInput" type="text" placeholder="Enter room code">
+    <button onclick="joinRoom()">Join Room</button>
+  </div>
 
-  <ul id="players"></ul>
+  <div id="room" style="display: none;">
+    <p id="roomDisplay"></p>
+    <ul id="players"></ul>
+    <button onclick="leaveRoom()">Leave Room</button>
+  </div>
 
-  <!-- Load Socket.IO client -->
+  <p id="status"></p>
+
   <script src="/socket.io/socket.io.js"></script>
-
   <script>
     const socket = io();
+    let currentRoom = null;
 
+    // On connect
     socket.on('connect', () => {
-      document.body.insertAdjacentHTML('beforeend', `<p>Connected! Your ID: ${socket.id}</p>`);
+      document.getElementById('status').innerText = `Connected! Your ID: ${socket.id}`;
     });
 
+    // Create room
     function createRoom() {
       socket.emit('createRoom');
     }
 
+    // Join room
     function joinRoom() {
-      const roomName = document.getElementById('roomInput').value;
-      socket.emit('joinRoom', roomName);
+      const roomName = document.getElementById('roomInput').value.trim();
+      if (roomName) {
+        socket.emit('joinRoom', roomName);
+      }
     }
 
+    // Leave room
+    function leaveRoom() {
+      socket.emit('leaveRoom', currentRoom);
+      currentRoom = null;
+      document.getElementById('room').style.display = 'none';
+      document.getElementById('lobby').style.display = 'block';
+    }
+
+    // Server sends new room ID
     socket.on('roomCreated', (roomId) => {
-      document.getElementById('roomDisplay').innerText = `Room ID: ${roomId} (share this with friends!)`;
+      currentRoom = roomId;
+      showRoom(roomId);
     });
 
+    // Update room player list
     socket.on('roomUpdate', (players) => {
+      if (!currentRoom) return;
       const list = document.getElementById('players');
       list.innerHTML = '';
       players.forEach((id) => {
@@ -49,9 +73,19 @@
       });
     });
 
+    // Show error messages
     socket.on('errorMessage', (msg) => {
       alert(msg);
     });
+
+    // Helper to display room UI
+    function showRoom(roomId) {
+      currentRoom = roomId;
+      document.getElementById('roomDisplay').innerText = `You are in Room: ${roomId}`;
+      document.getElementById('lobby').style.display = 'none';
+      document.getElementById('room').style.display = 'block';
+    }
   </script>
+
 </body>
 </html>
