@@ -21,7 +21,19 @@
   <div id="room" style="display: none;">
     <p id="roomDisplay"></p>
     <ul id="players"></ul>
-    <div id="start-game-container"></div> <button onclick="leaveRoom()">Leave Room</button>
+    <div id="start-game-container"></div> 
+    <button onclick="leaveRoom()">Leave Room</button>
+  </div>
+
+  <div id="game-container" style="display: none;">
+    <h3>Game Board</h3>
+    <div id="opponents-area"></div>
+    <hr>
+    <div id="player-area"></div>
+    <div id="action-menu"></div>
+    <hr>
+    <h4>Action Log</h4>
+    <div id="action-log"></div>
   </div>
 
   <p id="status"></p>
@@ -30,6 +42,76 @@
   <script>
     const socket = io();
     let currentRoom = null;
+    let gameState = null; // Variable to hold the current game state
+
+    socket.on('gameStarted', (initialGameState) => {
+      console.log('Game is starting!', initialGameState);
+      gameState = initialGameState;
+
+      // Hide lobby and room divs
+      document.getElementById('lobby').style.display = 'none';
+      document.getElementById('room').style.display = 'none';
+      
+      // Show the game container
+      document.getElementById('game-container').style.display = 'block';
+
+      renderGameState();
+    });
+
+    // This function redraws the entire game UI based on the current gameState
+    function renderGameState() {
+      if (!gameState) return;
+
+      const opponentsArea = document.getElementById('opponents-area');
+      const playerArea = document.getElementById('player-area');
+      const actionMenu = document.getElementById('action-menu');
+      const actionLog = document.getElementById('action-log');
+
+      // Clear previous state
+      opponentsArea.innerHTML = '<h4>Opponents</h4>';
+      playerArea.innerHTML = '';
+      actionMenu.innerHTML = '';
+
+      // Find the current player's data
+      const me = gameState.players.find(p => p.id === socket.id);
+      const myTurn = gameState.players[gameState.currentPlayerIndex].id === socket.id;
+
+      // Render other players
+      gameState.players.forEach(player => {
+        if (player.id === socket.id) return; // Don't render myself here
+
+        const opponentDiv = document.createElement('div');
+        const isTheirTurn = gameState.players[gameState.currentPlayerIndex].id === player.id;
+        opponentDiv.innerHTML = `
+          <strong>${player.name} ${isTheirTurn ? ' (Turn)' : ''}</strong><br>
+          Coins: ${player.coins}<br>
+          Cards: ${player.cards.length}
+        `;
+        opponentsArea.appendChild(opponentDiv);
+      });
+
+      // Render my own area
+      if (me) {
+        playerArea.innerHTML = `
+          <h4>Your Hand (${me.name})</h4>
+          <p><strong>My Coins:</strong> ${me.coins}</p>
+          <p><strong>My Cards:</strong> ${me.cards.join(', ')}</p>
+        `;
+      }
+      
+      // Render action buttons if it's my turn
+      if (myTurn) {
+        actionMenu.innerHTML = `
+          <h4>Your Actions</h4>
+          <button>Income (Take 1 coin)</button>
+          <button>Foreign Aid (Take 2 coins)</button>
+          <button>Coup (Pay 7 coins)</button>
+        `;
+      }
+
+      // Render action log
+      actionLog.innerHTML = gameState.actionLog.join('<br>');
+    }
 
     // Handle starting the game
     function startGame() {
