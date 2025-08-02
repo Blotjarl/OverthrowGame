@@ -47,6 +47,7 @@ io.on('connection', (socket) => {
 
   socket.on('leaveRoom', (roomId) => {
     leaveRoom(socket, roomId);
+    currentRoom = null;
   });
 
   socket.on('disconnect', () => {
