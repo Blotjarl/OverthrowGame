@@ -12,6 +12,8 @@
     <button onclick="createRoom()">Create Room</button>
     
     <h3>Join a Room</h3>
+    <input id="nameInput" type="text" placeholder="Enter your name">
+    <br><br>
     <input id="roomInput" type="text" placeholder="Enter room code">
     <button onclick="joinRoom()">Join Room</button>
   </div>
@@ -36,14 +38,22 @@
 
     // Create room
     function createRoom() {
-      socket.emit('createRoom');
+      const username = document.getElementById('nameInput').value.trim();
+      if (username) {
+        socket.emit('createRoom', { username });
+    } else {
+        alert('Please enter a name!');
+      }
     }
 
     // Join room
     function joinRoom() {
-      const roomName = document.getElementById('roomInput').value.trim();
-      if (roomName) {
-        socket.emit('joinRoom', roomName);
+      const username = document.getElementById('nameInput').value.trim();
+      const roomId = document.getElementById('roomInput').value.trim();
+      if (username && roomId) {
+        socket.emit('joinRoom', { roomId, username });
+      } else {
+        alert('Please enter your name and a room code!');
       }
     }
 
@@ -63,15 +73,22 @@
 
     // Update room player list
     socket.on('roomUpdate', (players) => {
-      if (!currentRoom) return;
+      if (!currentRoom) {
+        const roomId = document.getElementById('roomInput').value.trim();
+        showRoom(roomId);
+      }
       const list = document.getElementById('players');
-      list.innerHTML = '';
-      players.forEach((id) => {
-        const li = document.createElement('li');
-        li.textContent = id;
-        list.appendChild(li);
+        list.innerHTML = '';
+        players.forEach((player) => { // players is now an array of objects
+          const li = document.createElement('li');
+          li.textContent = player.name; // Display the name
+          if (player.id === socket.id) {
+              li.textContent += ' (You)';
+              li.style.fontWeight = 'bold';
+          }
+          list.appendChild(li);
+        });
       });
-    });
 
     // Show error messages
     socket.on('errorMessage', (msg) => {

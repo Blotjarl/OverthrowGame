@@ -5,6 +5,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const { v4: uuidv4 } = require('uuid');
 
 const path = require('path');
 app.use(express.static(path.join(__dirname, 'public')));
@@ -17,7 +18,7 @@ app.get('/', (req, res) => {
 const rooms = {}; // { roomId: { players: [] } }
 
 function generateRoomId() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  return uuidv4().substring(0,6).toUpperCase(); // Generate a short room ID
 }
 
 io.on('connection', (socket) => {
@@ -25,21 +26,21 @@ io.on('connection', (socket) => {
 
   let currentRoom = null;
 
-  socket.on('createRoom', () => {
+  socket.on('createRoom', ({ username }) => {
     const roomId = generateRoomId();
-    rooms[roomId] = { players: [socket.id] };
+    rooms[roomId] = { players: [{ id: socket.id, name: username }] }; // Store player object
     currentRoom = roomId;
     socket.join(roomId);
     socket.emit('roomCreated', roomId);
     io.to(roomId).emit('roomUpdate', rooms[roomId].players);
   });
 
-  socket.on('joinRoom', (roomId) => {
+  socket.on('joinRoom', ({ roomId, username }) => {
     if (!rooms[roomId]) {
       socket.emit('errorMessage', 'Room does not exist!');
       return;
     }
-    rooms[roomId].players.push(socket.id);
+    rooms[roomId].players.push({ id: socket.id, name: username });
     currentRoom = roomId;
     socket.join(roomId);
     io.to(roomId).emit('roomUpdate', rooms[roomId].players);
@@ -61,7 +62,7 @@ io.on('connection', (socket) => {
     if (!rooms[roomId]) return;
 
     // Remove player
-    rooms[roomId].players = rooms[roomId].players.filter(id => id !== socket.id);
+    rooms[roomId].players = rooms[roomId].players.filter(player => player.id !== socket.id);
     socket.leave(roomId);
 
     // If empty, delete room
