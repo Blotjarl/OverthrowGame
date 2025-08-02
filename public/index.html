@@ -21,7 +21,7 @@
   <div id="room" style="display: none;">
     <p id="roomDisplay"></p>
     <ul id="players"></ul>
-    <button onclick="leaveRoom()">Leave Room</button>
+    <div id="start-game-container"></div> <button onclick="leaveRoom()">Leave Room</button>
   </div>
 
   <p id="status"></p>
@@ -30,6 +30,12 @@
   <script>
     const socket = io();
     let currentRoom = null;
+
+    // Handle starting the game
+    function startGame() {
+      console.log('Starting game in room:', currentRoom);
+      socket.emit('startGame', currentRoom);
+    }
 
     // On connect
     socket.on('connect', () => {
@@ -72,23 +78,34 @@
     });
 
     // Update room player list
-    socket.on('roomUpdate', (players) => {
+    socket.on('roomUpdate', (room) => { // 'room' is now an object { hostId, players }
       if (!currentRoom) {
         const roomId = document.getElementById('roomInput').value.trim();
         showRoom(roomId);
       }
+
+      // Update player list (now using room.players)
       const list = document.getElementById('players');
-        list.innerHTML = '';
-        players.forEach((player) => { // players is now an array of objects
-          const li = document.createElement('li');
-          li.textContent = player.name; // Display the name
-          if (player.id === socket.id) {
-              li.textContent += ' (You)';
-              li.style.fontWeight = 'bold';
-          }
-          list.appendChild(li);
-        });
+      list.innerHTML = '';
+      room.players.forEach((player) => {
+        const li = document.createElement('li');
+        li.textContent = player.name;
+        if (player.id === socket.id) {
+            li.textContent += ' (You)';
+            li.style.fontWeight = 'bold';
+        }
+        list.appendChild(li);
       });
+
+      // Logic to show/hide the "Start Game" button
+      const startButtonContainer = document.getElementById('start-game-container');
+      // For a 2+ player game
+      if (room.hostId === socket.id && room.players.length >= 2) {
+        startButtonContainer.innerHTML = '<button onclick="startGame()">Start Game</button>';
+      } else {
+        startButtonContainer.innerHTML = ''; // Clear the button if conditions aren't met
+      }
+    });
 
     // Show error messages
     socket.on('errorMessage', (msg) => {

@@ -28,11 +28,14 @@ io.on('connection', (socket) => {
 
   socket.on('createRoom', ({ username }) => {
     const roomId = generateRoomId();
-    rooms[roomId] = { players: [{ id: socket.id, name: username }] }; // Store player object
+    rooms[roomId] = {
+        hostId: socket.id,
+        players: [{ id: socket.id, name: username }]
+    };
     currentRoom = roomId;
     socket.join(roomId);
     socket.emit('roomCreated', roomId);
-    io.to(roomId).emit('roomUpdate', rooms[roomId].players);
+    io.to(roomId).emit('roomUpdate', rooms[roomId]);
   });
 
   socket.on('joinRoom', ({ roomId, username }) => {
@@ -43,7 +46,7 @@ io.on('connection', (socket) => {
     rooms[roomId].players.push({ id: socket.id, name: username });
     currentRoom = roomId;
     socket.join(roomId);
-    io.to(roomId).emit('roomUpdate', rooms[roomId].players);
+    io.to(roomId).emit('roomUpdate', rooms[roomId]);
   });
 
   socket.on('leaveRoom', (roomId) => {
@@ -70,7 +73,7 @@ io.on('connection', (socket) => {
       delete rooms[roomId];
       console.log(`Room ${roomId} deleted (empty).`);
     } else {
-      io.to(roomId).emit('roomUpdate', rooms[roomId].players);
+      io.to(roomId).emit('roomUpdate', rooms[roomId]);
     }
   }
 });
