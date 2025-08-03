@@ -64,6 +64,16 @@
       renderGameState();
     });
 
+    function revealCard(cardName) {
+      console.log(`Revealing card: ${cardName}`);
+      socket.emit('revealCard', { roomId: currentRoom, cardName: cardName });
+    }
+
+    function respondToAction(response) {
+      console.log(`Responding to action with: ${response}`);
+      socket.emit('challengeResponse', { roomId: currentRoom, response: response });
+    }
+
     // This function redraws the entire game UI based on the current gameState
     function renderGameState() {
       if (!gameState) return;
@@ -123,9 +133,30 @@
         case 'challenge':
           const { actorName, action } = gameState.pendingAction;
           actionMenu.innerHTML = `<h4>${actorName} is attempting to use ${action}!</h4>`;
-          if (!myTurn) { // Everyone but the current player can challenge
-            actionMenu.innerHTML += `<button>Challenge</button> <button>Pass</button>`;
+          if (currentPlayer.id !== socket.id) { // Check if you are not the current player
+            // Add onclick handlers to these buttons
+            actionMenu.innerHTML += `
+                <button onclick="respondToAction('challenge')">Challenge</button>
+                <button onclick="respondToAction('pass')">Pass</button>
+            `;
           }
+          break;
+        
+        case 'reveal_card':
+          const playerToReveal = gameState.players.find(p => p.id === gameState.playerToReveal.id);
+          actionMenu.innerHTML = `<h4>Waiting for ${playerToReveal.name} to reveal a card...</h4>`;
+
+          // If it's ME who has to reveal...
+          if (gameState.playerToReveal.id === socket.id) {
+            actionMenu.innerHTML = `
+              <h4>You lost the challenge. Choose a card to reveal:</h4>
+              <button onclick="revealCard('${me.cards[0]}')">${me.cards[0]}</button>
+              ${me.cards[1] ? `<button onclick="revealCard('${me.cards[1]}')">${me.cards[1]}</button>` : ''}
+            `;
+          }
+          break;
+        case 'game_over':
+          actionMenu.innerHTML = `<h2>Game Over</h2>`;
           break;
       }
 

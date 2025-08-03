@@ -49,12 +49,118 @@ io.on('connection', (socket) => {
 
     let currentRoom = null;
 
+    socket.on('revealCard', ({ roomId, cardName }) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameState || room.gameState.phase !== 'reveal_card') return;
+
+        let gameState = room.gameState;
+        // Make sure the right person is revealing
+        if (socket.id !== gameState.playerToReveal.id) return;
+
+        const player = gameState.players.find(p => p.id === socket.id);
+        const cardIndex = player.cards.indexOf(cardName);
+
+        if (cardIndex > -1) {
+            // Move the card from their hand to their revealed cards
+            player.revealedCards.push(player.cards.splice(cardIndex, 1)[0]);
+            gameState.actionLog.push(`${player.name} reveals their ${cardName}.`);
+
+            // Check if the player is eliminated
+            if (player.cards.length === 0) {
+                player.isAlive = false;
+                gameState.actionLog.push(`${player.name} has been eliminated!`);
+
+                const alivePlayers = gameState.players.filter(p => p.isAlive);
+                if (alivePlayers.length === 1) {
+                    const winner = alivePlayers[0];
+                    gameState.phase = 'game_over'; // New phase
+                    gameState.actionLog.push(`${winner.name} is the last one standing and wins the game!`);
+                    io.to(roomId).emit('gameUpdate', gameState);
+                    return; // Stop the function here, game is over
+                }
+            }
+        }
+        
+        // Reset phase and advance turn
+        gameState.phase = 'action';
+        gameState.playerToReveal = null;
+        gameState.passedPlayers = [];
+        gameState = advanceTurn(gameState);
+
+        io.to(roomId).emit('gameUpdate', gameState);
+    });
+
+    socket.on('challengeResponse', ({ roomId, response }) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameState || room.gameState.phase !== 'challenge') return;
+
+        let gameState = room.gameState;
+        const responderId = socket.id;
+        const { action, actorId } = gameState.pendingAction;
+
+        if (response === 'challenge') {
+            const challenger = gameState.players.find(p => p.id === responderId);
+            const actor = gameState.players.find(p => p.id === actorId);
+            const requiredCard = action === 'Tax' ? 'Duke' : null; // We'll add more cards here later
+
+            gameState.actionLog.push(`${challenger.name} challenges ${actor.name}'s claim to be a ${requiredCard}!`);
+
+            // Check if the actor has the required card
+            if (actor.cards.includes(requiredCard)) {
+            // --- CHALLENGE FAILED ---
+            gameState.actionLog.push(`${actor.name} reveals a ${requiredCard}! The challenge fails.`);
+            
+            // The challenger must reveal a card
+            gameState.phase = 'reveal_card';
+            gameState.playerToReveal = { id: challenger.id, reason: 'Failed Challenge' };
+
+            // Actor's action succeeds.
+            if (action === 'Tax') actor.coins += 3;
+
+            // Actor shuffles the revealed card back and gets a new one
+            const cardIndex = actor.cards.indexOf(requiredCard);
+            actor.cards.splice(cardIndex, 1); // Remove the card
+            gameState.deck.push(requiredCard); // Add it back to the deck
+            shuffle(gameState.deck); // Shuffle the deck
+            actor.cards.push(gameState.deck.pop()); // Draw a new card
+
+            } else {
+            // --- CHALLENGE SUCCEEDED ---
+            gameState.actionLog.push(`${actor.name} was bluffing! The challenge succeeds.`);
+            
+            // The actor's action is cancelled and they must reveal a card
+            gameState.phase = 'reveal_card';
+            gameState.playerToReveal = { id: actor.id, reason: 'Caught Bluffing' };
+            }
+
+        } else if (response === 'pass') {
+            // This logic remains the same
+            gameState.passedPlayers.push(responderId);
+            gameState.actionLog.push(`${gameState.players.find(p => p.id === responderId).name} does not challenge.`);
+            
+            const numOtherPlayers = gameState.players.length - 1;
+            if (gameState.passedPlayers.length === numOtherPlayers) {
+            gameState.actionLog.push(`The action is not challenged and succeeds.`);
+            const actor = gameState.players.find(p => p.id === actorId);
+            if (action === 'Tax') {
+                actor.coins += 3;
+                gameState.actionLog.push(`${actor.name} gains 3 coins from Tax.`);
+            }
+            gameState.phase = 'action';
+            gameState = advanceTurn(gameState);
+            gameState.passedPlayers = [];
+            }
+        }
+
+        io.to(roomId).emit('gameUpdate', gameState);
+    });
+
     // --- Handle Player Actions ---
     socket.on('performAction', ({ roomId, action }) => {
         const room = rooms[roomId];
         if (!room || !room.gameState) return;
         
-        const gameState = room.gameState;
+        let gameState = room.gameState;
         const playerIndex = gameState.players.findIndex(p => p.id === socket.id);
         
         if (playerIndex !== gameState.currentPlayerIndex) return; // Not their turn
@@ -67,8 +173,7 @@ io.on('connection', (socket) => {
             player.coins += 1;
             gameState.actionLog.push(`${player.name} takes Income.`);
             // Advance turn
-            gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
-            gameState.actionLog.push(`It is now ${gameState.players[gameState.currentPlayerIndex].name}'s turn.`);
+            gameState = advanceTurn(gameState);
             io.to(roomId).emit('gameUpdate', gameState);
             return; // End the function here
         }
@@ -119,6 +224,7 @@ io.on('connection', (socket) => {
             currentPlayerIndex: startingPlayerIndex,
             phase: 'action', // Set the initial phase
             pendingAction: null, // No pending action at the start
+            passedPlayers: [],
             actionLog: [`Game started. It is ${initialPlayerStates[startingPlayerIndex].name}'s turn.`]
         };
 
@@ -176,6 +282,20 @@ io.on('connection', (socket) => {
         } else {
         io.to(roomId).emit('roomUpdate', rooms[roomId]);
         }
+    }
+
+    function advanceTurn(gameState) {
+        let nextPlayerIndex = gameState.currentPlayerIndex;
+        
+        // Keep looping until we find a player who is still alive
+        do {
+            nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
+        } while (!gameState.players[nextPlayerIndex].isAlive);
+
+        gameState.currentPlayerIndex = nextPlayerIndex;
+        gameState.actionLog.push(`It is now ${gameState.players[nextPlayerIndex].name}'s turn.`);
+        
+        return gameState;
     }
 });
 
