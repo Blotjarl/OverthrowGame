@@ -44,6 +44,12 @@
     let currentRoom = null;
     let gameState = null; // Variable to hold the current game state
 
+    socket.on('gameUpdate', (newGameState) => {
+      console.log('Received game update:', newGameState);
+      gameState = newGameState; // Overwrite the old state with the new one
+      renderGameState(); // Redraw the entire game board
+    });
+
     socket.on('gameStarted', (initialGameState) => {
       console.log('Game is starting!', initialGameState);
       gameState = initialGameState;
@@ -74,7 +80,8 @@
 
       // Find the current player's data
       const me = gameState.players.find(p => p.id === socket.id);
-      const myTurn = gameState.players[gameState.currentPlayerIndex].id === socket.id;
+      const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+      const myTurn = currentPlayer.id === socket.id;
 
       // Render other players
       gameState.players.forEach(player => {
@@ -100,17 +107,35 @@
       }
       
       // Render action buttons if it's my turn
-      if (myTurn) {
-        actionMenu.innerHTML = `
-          <h4>Your Actions</h4>
-          <button>Income (Take 1 coin)</button>
-          <button>Foreign Aid (Take 2 coins)</button>
-          <button>Coup (Pay 7 coins)</button>
-        `;
+      switch (gameState.phase) {
+        case 'action':
+          if (myTurn) {
+            actionMenu.innerHTML = `
+              <h4>Your Actions</h4>
+              <button onclick="performAction('income')">Income</button>
+              <button onclick="performAction('foreign_aid')">Foreign Aid</button>
+              <button onclick="performAction('tax')">Tax (Duke)</button>
+              ${me.coins >= 7 ? `<button onclick="performAction('coup')">Coup</button>` : ''}
+              `;
+          }
+          break;
+    
+        case 'challenge':
+          const { actorName, action } = gameState.pendingAction;
+          actionMenu.innerHTML = `<h4>${actorName} is attempting to use ${action}!</h4>`;
+          if (!myTurn) { // Everyone but the current player can challenge
+            actionMenu.innerHTML += `<button>Challenge</button> <button>Pass</button>`;
+          }
+          break;
       }
 
       // Render action log
       actionLog.innerHTML = gameState.actionLog.join('<br>');
+    }
+
+    function performAction(action) {
+      console.log(`Attempting to perform action: ${action}`);
+      socket.emit('performAction', { roomId: currentRoom, action: action });
     }
 
     // Handle starting the game

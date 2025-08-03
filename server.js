@@ -49,6 +49,45 @@ io.on('connection', (socket) => {
 
     let currentRoom = null;
 
+    // --- Handle Player Actions ---
+    socket.on('performAction', ({ roomId, action }) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameState) return;
+        
+        const gameState = room.gameState;
+        const playerIndex = gameState.players.findIndex(p => p.id === socket.id);
+        
+        if (playerIndex !== gameState.currentPlayerIndex) return; // Not their turn
+        if (gameState.phase !== 'action') return; // Not the action phase
+
+        const player = gameState.players[playerIndex];
+        
+        // --- Handle simple actions that don't have challenges ---
+        if (action === 'income') {
+            player.coins += 1;
+            gameState.actionLog.push(`${player.name} takes Income.`);
+            // Advance turn
+            gameState.currentPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+            gameState.actionLog.push(`It is now ${gameState.players[gameState.currentPlayerIndex].name}'s turn.`);
+            io.to(roomId).emit('gameUpdate', gameState);
+            return; // End the function here
+        }
+
+        // --- Handle actions that can be challenged ---
+        if (action === 'tax') {
+            gameState.phase = 'challenge'; // Change the phase
+            gameState.pendingAction = {
+            action: 'Tax',
+            actorName: player.name,
+            actorId: player.id
+            };
+            gameState.actionLog.push(`${player.name} claims to be a Duke to perform TAX.`);
+            io.to(roomId).emit('gameUpdate', gameState); // Broadcast the new phase
+        }
+
+        // We will add other actions like foreign_aid here
+    });
+
     socket.on('startGame', (roomId) => {
         // 1. --- VALIDATION ---
         const room = rooms[roomId];
@@ -78,6 +117,8 @@ io.on('connection', (socket) => {
             players: initialPlayerStates,
             deck: shuffledDeck,
             currentPlayerIndex: startingPlayerIndex,
+            phase: 'action', // Set the initial phase
+            pendingAction: null, // No pending action at the start
             actionLog: [`Game started. It is ${initialPlayerStates[startingPlayerIndex].name}'s turn.`]
         };
 
