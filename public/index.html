@@ -43,6 +43,8 @@
     const socket = io();
     let currentRoom = null;
     let gameState = null; // Variable to hold the current game state
+    let selectedCards = [];
+    let selectingTargetFor = null;
 
     socket.on('gameUpdate', (newGameState) => {
       console.log('Received game update:', newGameState);
@@ -72,6 +74,16 @@
     function respondToAction(response) {
       console.log(`Responding to action with: ${response}`);
       socket.emit('challengeResponse', { roomId: currentRoom, response: response });
+    }
+
+    function cancelTargetSelection() {
+      selectingTargetFor = null;
+      renderGameState();
+    }
+
+    function initiateTargetedAction(action) {
+      selectingTargetFor = action; // Set the state to 'steal' or 'assassinate'
+      renderGameState(); // Re-draw the UI to show the target list
     }
 
     // This function redraws the entire game UI based on the current gameState
@@ -120,25 +132,64 @@
       switch (gameState.phase) {
         case 'action':
           if (myTurn) {
-            actionMenu.innerHTML = `
-              <h4>Your Actions</h4>
-              <button onclick="performAction('income')">Income</button>
-              <button onclick="performAction('foreign_aid')">Foreign Aid</button>
-              <button onclick="performAction('tax')">Tax (Duke)</button>
-              ${me.coins >= 7 ? `<button onclick="performAction('coup')">Coup</button>` : ''}
+            // If we are currently selecting a target for an action...
+            if (selectingTargetFor) {
+              actionMenu.innerHTML = `<h4>Who do you want to ${selectingTargetFor}?</h4>`;
+              gameState.players.forEach(target => {
+                if (target.id !== socket.id && target.isAlive) {
+                  // Pass both the action and the target's ID
+                  actionMenu.innerHTML += `<button onclick="performAction('${selectingTargetFor}', '${target.id}')">${target.name}</button>`;
+                }
+              });
+              // Add a cancel button
+              actionMenu.innerHTML += `<button onclick="cancelTargetSelection()">Cancel</button>`;
+            } 
+            // Otherwise, show the normal list of actions
+            else {
+              let actionsHtml = `
+                <h4>Your Actions</h4>
+                <button onclick="performAction('income')">Income</button>
+                <button onclick="performAction('foreign_aid')">Foreign Aid</button>
+                <button onclick="performAction('tax')">Tax (Duke)</button>
+                <!-- These now call the new function -->
+                <button onclick="initiateTargetedAction('steal')">Steal (Captain)</button>
               `;
+              if (me.coins >= 3) {
+                actionsHtml += `<button onclick="initiateTargetedAction('assassinate')">Assassinate (Assassin)</button>`;
+              }
+              if (me.coins >= 7) {
+                actionsHtml += `<button onclick="initiateTargetedAction('coup')">Coup</button>`;
+              }
+              actionMenu.innerHTML = actionsHtml;
+            }
           }
           break;
     
         case 'challenge':
           const { actorName, action } = gameState.pendingAction;
           actionMenu.innerHTML = `<h4>${actorName} is attempting to use ${action}!</h4>`;
-          if (currentPlayer.id !== socket.id) { // Check if you are not the current player
+          if (currentPlayer.id !== socket.id && me.isAlive) { // Check if you are not the current player
             // Add onclick handlers to these buttons
             actionMenu.innerHTML += `
                 <button onclick="respondToAction('challenge')">Challenge</button>
                 <button onclick="respondToAction('pass')">Pass</button>
             `;
+          }
+          break;
+
+        case 'exchange_cards':
+          actionMenu.innerHTML = `<h4>Waiting for ${gameState.players.find(p => p.id === gameState.exchangeInfo.playerId).name} to exchange...</h4>`;
+
+          // If it's ME who is exchanging...
+          if (gameState.exchangeInfo.playerId === socket.id) {
+            actionMenu.innerHTML = `
+              <h4>You drew two cards. Choose which two to KEEP.</h4>
+              <div id="exchange-options"></div>
+            `;
+            const optionsContainer = document.getElementById('exchange-options');
+            gameState.exchangeInfo.options.forEach(card => {
+              optionsContainer.innerHTML += `<button onclick="selectExchangeCard('${card}')">${card}</button>`;
+            });
           }
           break;
         
@@ -164,9 +215,12 @@
       actionLog.innerHTML = gameState.actionLog.join('<br>');
     }
 
-    function performAction(action) {
-      console.log(`Attempting to perform action: ${action}`);
-      socket.emit('performAction', { roomId: currentRoom, action: action });
+    function performAction(action, targetId = null) {
+      console.log(`Attempting to perform action: ${action}`, targetId ? `on target ${targetId}` : '');
+      socket.emit('performAction', { roomId: currentRoom, action, targetId });
+
+      // Reset the targeting state after performing the action
+      selectingTargetFor = null; 
     }
 
     // Handle starting the game
@@ -257,6 +311,17 @@
       document.getElementById('lobby').style.display = 'none';
       document.getElementById('room').style.display = 'block';
     }
+
+    function selectExchangeCard(cardName) {
+      // Add card to selection
+      selectedCards.push(cardName);
+
+      // Once two cards are selected, send them to the server
+      if (selectedCards.length === 2) {
+        socket.emit('returnExchangeCards', { roomId: currentRoom, keptCards: selectedCards });
+        selectedCards = []; // Reset for next time
+      }
+}
   </script>
 
 </body>
