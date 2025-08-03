@@ -388,6 +388,10 @@ io.on('connection', (socket) => {
             requiredCard = 'Duke';
             logMessage = `${player.name} claims to have a Duke to perform TAX.`;
             break;
+            case 'foreign_aid': // <-- ADD THIS NEW CASE
+            logMessage = `${player.name} is attempting to take Foreign Aid.`;
+            requiredCard = null; // Foreign aid itself cannot be challenged, only blocked.
+            break;
             case 'assassinate':
             if (player.coins < 3) return; // Not enough coins
             requiredCard = 'Assassin';
@@ -412,13 +416,75 @@ io.on('connection', (socket) => {
                 action: action,
                 actorId: player.id,
                 actorName: player.name,
-                targetId: targetId, // Will be null for tax/exchange
+                targetId: targetId,
                 requiredCard: requiredCard
             };
             gameState.actionLog.push(logMessage);
             io.to(roomId).emit('gameUpdate', gameState);
+        } 
+        else if (action === 'foreign_aid') { 
+            gameState.phase = 'block_declaration_period'; // The new phase for blocking
+            gameState.pendingAction = {
+                action: 'Foreign Aid',
+                actorId: player.id,
+                actorName: player.name
+            };
+            gameState.actionLog.push(logMessage);
+            io.to(roomId).emit('gameUpdate', gameState);
         }
- 
+
+    });
+
+    socket.on('foreignAidResponse', ({ roomId, response }) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameState || room.gameState.phase !== 'block_declaration_period') return;
+
+        let gameState = room.gameState;
+        const responderId = socket.id;
+        const actorId = gameState.pendingAction.actorId;
+
+        // --- Validation: Ensure responder is alive and not the one taking the action ---
+        const responder = gameState.players.find(p => p.id === responderId);
+        if (!responder || !responder.isAlive || responder.id === actorId) return;
+
+        if (response === 'block') {
+            // --- A player is claiming to have a Duke to block ---
+            gameState.actionLog.push(`${responder.name} claims to have a Duke to BLOCK the Foreign Aid!`);
+            
+            // Move to a new phase where this block can be challenged
+            gameState.phase = 'block_challenge';
+            gameState.pendingBlock = {
+                blockerId: responder.id,
+                blockingCard: 'Duke'
+            };
+            // Clear passers for the new challenge round
+            gameState.passedPlayers = [];
+
+        } else if (response === 'pass') {
+            // --- A player is not blocking ---
+            if (!gameState.passedPlayers.includes(responderId)) {
+                gameState.passedPlayers.push(responderId);
+            }
+            gameState.actionLog.push(`${responder.name} does not block.`);
+
+            // Check if all other living players have passed
+            const numPossibleBlockers = gameState.players.filter(p => p.isAlive && p.id !== actorId).length;
+
+            if (gameState.passedPlayers.length === numPossibleBlockers) {
+                // --- FOREIGN AID SUCCEEDS UNCHALLENGED ---
+                const actor = gameState.players.find(p => p.id === actorId);
+                actor.coins += 2;
+                gameState.actionLog.push(`${actor.name}'s Foreign Aid succeeds. They gain 2 coins.`);
+                
+                // Reset for the next turn
+                gameState.phase = 'action';
+                gameState.pendingAction = null;
+                gameState.passedPlayers = [];
+                gameState = advanceTurn(gameState);
+            }
+        }
+
+        io.to(roomId).emit('gameUpdate', gameState);
     });
 
     socket.on('startGame', (roomId) => {

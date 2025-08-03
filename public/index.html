@@ -86,6 +86,11 @@
       socket.emit('declareBlock', { roomId: currentRoom, blockType: blockType });
     }
 
+    function respondToForeignAid(response) {
+      console.log(`Responding to Foreign Aid with: ${response}`);
+      socket.emit('foreignAidResponse', { roomId: currentRoom, response: response });
+    }
+
     function respondToBlock(response) {
       console.log(`Responding to block with: ${response}`);
       // Emit a new event specifically for block responses
@@ -209,6 +214,19 @@
               actionMenu.innerHTML = blockButtons;
           }
           break;  
+
+        case 'block_declaration_period':
+            const foreignAidActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
+            actionMenu.innerHTML = `<h4>${foreignAidActor.name} is taking Foreign Aid!</h4>`;
+
+            // Show block/pass buttons to everyone who is alive and NOT the one taking the action
+            if (foreignAidActor.id !== socket.id && me.isAlive) {
+                actionMenu.innerHTML += `
+                    <button onclick="respondToForeignAid('block')">Block with Duke</button>
+                    <button onclick="respondToForeignAid('pass')">Pass</button>
+                `;
+            }
+            break;
 
         case 'block_challenge':
           const blocker = gameState.players.find(p => p.id === gameState.pendingBlock.blockerId);
