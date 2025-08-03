@@ -90,21 +90,119 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('gameUpdate', gameState);
     });
 
+    socket.on('blockResponse', ({ roomId, response }) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameState || room.gameState.phase !== 'block_challenge') return;
+
+        let gameState = room.gameState;
+        const responderId = socket.id;
+        const { blockerId, requiredCard } = gameState.pendingBlock;
+        const blocker = gameState.players.find(p => p.id === blockerId);
+
+        // --- VALIDATION: Ensure responder is alive and not the blocker ---
+        const responder = gameState.players.find(p => p.id === responderId);
+        if (!responder || !responder.isAlive || responder.id === blockerId) return;
+
+
+        if (response === 'challenge') {
+            gameState.actionLog.push(`${responder.name} challenges ${blocker.name}'s block!`);
+
+            // Check if the blocker actually has one of the required cards
+            const hasBlockCard = Array.isArray(requiredCard)
+                ? requiredCard.some(card => blocker.cards.includes(card))
+                : blocker.cards.includes(requiredCard);
+
+            if (hasBlockCard) {
+                // --- BLOCK CHALLENGE FAILED ---
+                // The blocker was telling the truth. The challenger loses a card.
+                gameState.actionLog.push(`${blocker.name} reveals a valid block card! The challenge fails.`);
+                gameState.phase = 'reveal_card';
+                gameState.playerToReveal = { id: responder.id, reason: 'Failed Block Challenge' };
+
+                // The original action is successfully blocked.
+                gameState.actionLog.push(`The original action is blocked.`);
+                
+                // Find the revealed card, shuffle it back, and draw a new one for the blocker.
+                const cardToReveal = Array.isArray(requiredCard)
+                    ? requiredCard.find(card => blocker.cards.includes(card))
+                    : requiredCard;
+                const cardIndex = blocker.cards.indexOf(cardToReveal);
+                blocker.cards.splice(cardIndex, 1);
+                gameState.deck.push(cardToReveal);
+                shuffle(gameState.deck);
+                blocker.cards.push(gameState.deck.pop());
+
+            } else {
+                // --- BLOCK CHALLENGE SUCCEEDED ---
+                // The blocker was bluffing. The blocker loses a card.
+                gameState.actionLog.push(`${blocker.name} was bluffing the block! The challenge succeeds.`);
+                gameState.phase = 'reveal_card';
+                gameState.playerToReveal = { id: blocker.id, reason: 'Caught Bluffing Block' };
+
+                 // --- NEW LOGIC STARTS HERE ---
+                // The original action now goes through successfully.
+                const originalAction = gameState.pendingAction.action;
+                const originalActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
+
+                if (originalAction.toLowerCase() === 'steal') {
+                    // The 'blocker' is the original target who failed the block.
+                    const coinsToSteal = Math.min(blocker.coins, 2); 
+                    originalActor.coins += coinsToSteal;
+                    blocker.coins -= coinsToSteal;
+                    gameState.actionLog.push(`${originalActor.name}'s steal succeeds, taking ${coinsToSteal} coins from ${blocker.name}.`);
+                }
+            }
+
+        } else if (response === 'pass') {
+            if (!gameState.passedPlayers.includes(responderId)) {
+                gameState.passedPlayers.push(responderId);
+            }
+            gameState.actionLog.push(`${responder.name} does not challenge the block.`);
+
+            // Check if all possible challengers have passed.
+            const numPossibleChallengers = gameState.players.filter(p => p.isAlive && p.id !== blockerId).length;
+            if (gameState.passedPlayers.length === numPossibleChallengers) {
+                // --- BLOCK SUCCEEDS UNCHALLENGED ---
+                gameState.actionLog.push(`The block is not challenged and succeeds. The original action is cancelled.`);
+                
+                // Reset for the next turn
+                gameState.phase = 'action';
+                gameState = advanceTurn(gameState);
+            }
+        }
+
+        // If the phase changed, clean up and broadcast
+        if (gameState.phase !== 'block_challenge') {
+            gameState.pendingAction = null;
+            gameState.pendingBlock = null;
+            gameState.passedPlayers = [];
+            io.to(roomId).emit('gameUpdate', gameState);
+        }
+    });
+
     socket.on('challengeResponse', ({ roomId, response }) => {
         const room = rooms[roomId];
         if (!room || !room.gameState || room.gameState.phase !== 'challenge') return;
 
         let gameState = room.gameState;
         const responderId = socket.id;
+
+        // --- Validation for responder ---
         const responder = gameState.players.find(p => p.id === responderId);
-            if (!responder || !responder.isAlive) {
-                console.log(`Dead player ${responderId} tried to respond.`);
-                return; // Stop the function
-            }
+        if (!responder || !responder.isAlive) {
+            console.log(`Dead player ${responderId} tried to respond.`);
+            return;
+        }
+        if (gameState.passedPlayers.includes(responderId)) {
+            console.log(`Player ${responderId} already passed.`);
+            return;
+        }
+        // --- End Validation ---
 
         const { action, actorId } = gameState.pendingAction;
 
         if (response === 'challenge') {
+            // This entire block for handling a direct challenge remains the same
             const challenger = gameState.players.find(p => p.id === responderId);
             const actor = gameState.players.find(p => p.id === actorId);
             const requiredCard = {
@@ -112,93 +210,75 @@ io.on('connection', (socket) => {
                 'assassinate': 'Assassin',
                 'steal': 'Captain',
                 'exchange': 'Ambassador'
-            }[action];      
+            }[action.toLowerCase()];
 
             gameState.actionLog.push(`${challenger.name} challenges ${actor.name}'s claim to be a ${requiredCard}!`);
 
-            // Check if the actor has the required card
             if (actor.cards.includes(requiredCard)) {
-            // --- CHALLENGE FAILED ---
-            gameState.actionLog.push(`${actor.name} reveals a ${requiredCard}! The challenge fails.`);
-            
-            // The challenger must reveal a card
-            gameState.phase = 'reveal_card';
-            gameState.playerToReveal = { id: challenger.id, reason: 'Failed Challenge' };
-
-            // Actor's action succeeds.
-            if (action === 'Tax') actor.coins += 3;
-
-            // Actor shuffles the revealed card back and gets a new one
-            const cardIndex = actor.cards.indexOf(requiredCard);
-            actor.cards.splice(cardIndex, 1); // Remove the card
-            gameState.deck.push(requiredCard); // Add it back to the deck
-            shuffle(gameState.deck); // Shuffle the deck
-            actor.cards.push(gameState.deck.pop()); // Draw a new card
-
+                // CHALLENGE FAILED
+                gameState.actionLog.push(`${actor.name} reveals a ${requiredCard}! The challenge fails.`);
+                gameState.phase = 'reveal_card';
+                gameState.playerToReveal = { id: challenger.id, reason: 'Failed Challenge' };
+                // Actor's action still needs to be resolved after the reveal. We will handle this later.
+                // For now, we just set up the reveal.
+                const cardIndex = actor.cards.indexOf(requiredCard);
+                actor.cards.splice(cardIndex, 1);
+                gameState.deck.push(requiredCard);
+                shuffle(gameState.deck);
+                actor.cards.push(gameState.deck.pop());
             } else {
-            // --- CHALLENGE SUCCEEDED ---
-            gameState.actionLog.push(`${actor.name} was bluffing! The challenge succeeds.`);
-            
-            // The actor's action is cancelled and they must reveal a card
-            gameState.phase = 'reveal_card';
-            gameState.playerToReveal = { id: actor.id, reason: 'Caught Bluffing' };
+                // CHALLENGE SUCCEEDED
+                gameState.actionLog.push(`${actor.name} was bluffing! The challenge succeeds.`);
+                gameState.phase = 'reveal_card';
+                gameState.playerToReveal = { id: actor.id, reason: 'Caught Bluffing' };
+                // Action is cancelled, turn will advance after reveal.
             }
+            // Clean up and broadcast
+            gameState.passedPlayers = [];
+            io.to(roomId).emit('gameUpdate', gameState);
 
         } else if (response === 'pass') {
-            // Check if player passed already
-            if (gameState.passedPlayers.includes(responderId)) {
-                console.log(`Player ${responderId} already passed.`);
-                return;
-            }
-
             gameState.passedPlayers.push(responderId);
-            gameState.actionLog.push(`${gameState.players.find(p => p.id === responderId).name} does not challenge.`);
+            gameState.actionLog.push(`${responder.name} does not challenge.`);
             
-            const numOtherPlayers = gameState.players.length - 1;
-            if (gameState.passedPlayers.length === numOtherPlayers) {
-                gameState.actionLog.push(`The action is not challenged and succeeds.`);
-                const actor = gameState.players.find(p => p.id === actorId);
-                switch (action) {
-                case 'tax':
-                    actor.coins += 3;
-                    gameState.actionLog.push(`${actor.name} gains 3 coins from Tax.`);
-                    break;
-                case 'assassinate':
-                    actor.coins -= 3; // Player pays the cost
-                    // Set the phase so the target must reveal a card
-                    gameState.phase = 'reveal_card';
-                    gameState.playerToReveal = { id: gameState.pendingAction.targetId, reason: 'Assassinated' };
-                    break;
-                case 'steal':
-                    const target = gameState.players.find(p => p.id === gameState.pendingAction.targetId);
-                    const coinsToSteal = Math.min(target.coins, 2);
-                    actor.coins += coinsToSteal;
-                    target.coins -= coinsToSteal;
-                    gameState.actionLog.push(`${actor.name} steals ${coinsToSteal} coins from ${target.name}.`);
-                    break;
-                case 'exchange':
-                    // Set a new phase for the exchange process
-                    gameState.phase = 'exchange_cards';
-                    const newCards = [gameState.deck.pop(), gameState.deck.pop()];
-                    gameState.exchangeInfo = {
-                        playerId: actor.id,
-                        options: [...actor.cards, ...newCards]
-                    };
-                    break;
-    }
+            // Check if all other living players have passed
+            const numPossibleChallengers = gameState.players.filter(p => p.isAlive && p.id !== actorId).length;
 
-// IMPORTANT: Only advance the turn if the action is fully resolved.
-// Actions like 'assassinate' and 'exchange' lead to new phases.
-if (gameState.phase === 'challenge') {
-    gameState.phase = 'action';
-    gameState = advanceTurn(gameState);
-}
+            if (gameState.passedPlayers.length === numPossibleChallengers) {
+                gameState.actionLog.push(`The action is not challenged.`);
+                
+                const blockableActions = ['assassinate', 'steal', 'foreign_aid'];
 
-gameState.passedPlayers = []; // Always clear the passers
+                // If the action is blockable, move to a new phase for the target to respond.
+                if (blockableActions.includes(action.toLowerCase())) {
+                    gameState.phase = 'declare_block'; // The correct new phase
+                } else {
+                    // If the action was NOT blockable (like Tax), it succeeds immediately.
+                    const actor = gameState.players.find(p => p.id === actorId);
+                    if (action.toLowerCase() === 'tax') {
+                        actor.coins += 3;
+                        gameState.actionLog.push(`${actor.name} gains 3 coins from Tax.`);
+                    }
+                    if (action.toLowerCase() === 'exchange') {
+                        gameState.phase = 'exchange_cards';
+                        const newCards = [gameState.deck.pop(), gameState.deck.pop()];
+                        gameState.exchangeInfo = {
+                            playerId: actor.id,
+                            options: [...actor.cards, ...newCards]
+                        };
+                    }
+                    
+                    // If the action is fully resolved now, advance the turn.
+                    if (gameState.phase !== 'exchange_cards') {
+                        gameState.phase = 'action';
+                        gameState = advanceTurn(gameState);
+                    }
+                }
+                // Clean up and broadcast
+                gameState.passedPlayers = [];
+                io.to(roomId).emit('gameUpdate', gameState);
             }
         }
-
-        io.to(roomId).emit('gameUpdate', gameState);
     });
 
     socket.on('returnExchangeCards', ({ roomId, keptCards }) => {
@@ -226,6 +306,57 @@ gameState.passedPlayers = []; // Always clear the passers
         
         io.to(roomId).emit('gameUpdate', gameState);
     });
+
+    socket.on('declareBlock', ({ roomId, blockType }) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameState || room.gameState.phase !== 'declare_block') return;
+
+        let gameState = room.gameState;
+        const targetId = gameState.pendingAction.targetId;
+
+        // --- VALIDATION: Make sure the right person is declaring the block ---
+        if (socket.id !== targetId) {
+            console.log(`Player ${socket.id} tried to declare a block when they were not the target.`);
+            return;
+        }
+
+        const blocker = gameState.players.find(p => p.id === targetId);
+        const originalAction = gameState.pendingAction.action;
+
+        if (blockType === 'No Block') {
+            // --- The action succeeds because it was not blocked ---
+            gameState.actionLog.push(`${blocker.name} does not block the ${originalAction}.`);
+            
+            // Resolve the original action (e.g., the steal)
+            const actor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
+            
+            if (originalAction.toLowerCase() === 'steal') {
+                const coinsToSteal = Math.min(blocker.coins, 2);
+                actor.coins += coinsToSteal;
+                blocker.coins -= coinsToSteal;
+                gameState.actionLog.push(`${actor.name} steals ${coinsToSteal} coins from ${blocker.name}.`);
+            }
+            // We will add logic for 'assassinate' here later
+
+            // Reset for the next turn
+            gameState.phase = 'action';
+            gameState.pendingAction = null;
+            gameState = advanceTurn(gameState);
+
+        } else {
+            // --- The player IS declaring a block ---
+            gameState.actionLog.push(`${blocker.name} claims to have a ${blockType} to block the ${originalAction}!`);
+            
+            // Move to a new phase where this block can be challenged
+            gameState.phase = 'block_challenge';
+            gameState.pendingBlock = {
+                blockerId: blocker.id,
+                blockingCard: blockType // e.g., 'Captain' or 'Ambassador'
+            };
+        }
+
+    io.to(roomId).emit('gameUpdate', gameState);
+});
 
     // --- Handle Player Actions ---
     socket.on('performAction', ({ roomId, action, targetId }) => {

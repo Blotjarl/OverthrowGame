@@ -81,6 +81,17 @@
       renderGameState();
     }
 
+    function declareBlock(blockType) {
+      console.log(`Declaring block with: ${blockType}`);
+      socket.emit('declareBlock', { roomId: currentRoom, blockType: blockType });
+    }
+
+    function respondToBlock(response) {
+      console.log(`Responding to block with: ${response}`);
+      // Emit a new event specifically for block responses
+      socket.emit('blockResponse', { roomId: currentRoom, response: response });
+    }
+
     function initiateTargetedAction(action) {
       selectingTargetFor = action; // Set the state to 'steal' or 'assassinate'
       renderGameState(); // Re-draw the UI to show the target list
@@ -166,13 +177,50 @@
           break;
     
         case 'challenge':
-          const { actorName, action } = gameState.pendingAction;
-          actionMenu.innerHTML = `<h4>${actorName} is attempting to use ${action}!</h4>`;
-          if (currentPlayer.id !== socket.id && me.isAlive) { // Check if you are not the current player
-            // Add onclick handlers to these buttons
+          case 'challenge':
+          const actor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
+          actionMenu.innerHTML = `<h4>${actor.name} is attempting to use ${gameState.pendingAction.action}!</h4>`;
+
+          // Show Challenge/Pass to everyone who is alive and NOT the person who took the action
+          if (actor.id !== socket.id && me.isAlive) {
+              actionMenu.innerHTML += `
+                  <button onclick="respondToAction('challenge')">Challenge</button>
+                  <button onclick="respondToAction('pass')">Pass</button>
+              `;
+          }
+          break;
+
+        case 'declare_block':
+          const actionInfo = gameState.pendingAction;
+          const target = gameState.players.find(p => p.id === actionInfo.targetId);
+          actionMenu.innerHTML = `<h4>Waiting for ${target.name} to respond to the ${actionInfo.action}...</h4>`;
+
+          // If YOU are the target of the action, show the block options
+          if (actionInfo.targetId === socket.id) {
+              let blockButtons = `<h4>Do you want to block the ${actionInfo.action}?</h4>`;
+              if (actionInfo.action.toLowerCase() === 'steal') {
+                  blockButtons += `
+                      <button onclick="declareBlock('Captain')">Block with Captain</button>
+                      <button onclick="declareBlock('Ambassador')">Block with Ambassador</button>
+                  `;
+              }
+              // We can add 'assassinate' logic here later
+              blockButtons += `<button onclick="declareBlock('No Block')">Do Not Block</button>`;
+              actionMenu.innerHTML = blockButtons;
+          }
+          break;  
+
+        case 'block_challenge':
+          const blocker = gameState.players.find(p => p.id === gameState.pendingBlock.blockerId);
+          const blockingCard = gameState.pendingBlock.blockingCard;
+
+          actionMenu.innerHTML = `<h4>${blocker.name} is attempting to BLOCK with a ${blockingCard}!</h4>`;
+
+          // Show challenge/pass buttons to everyone who is alive and NOT the one blocking
+          if (blocker.id !== socket.id && me.isAlive) {
             actionMenu.innerHTML += `
-                <button onclick="respondToAction('challenge')">Challenge</button>
-                <button onclick="respondToAction('pass')">Pass</button>
+              <button onclick="respondToBlock('challenge')">Challenge Block</button>
+              <button onclick="respondToBlock('pass')">Pass</button>
             `;
           }
           break;
