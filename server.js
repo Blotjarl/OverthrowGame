@@ -54,36 +54,60 @@ io.on('connection', (socket) => {
         if (!room || !room.gameState || room.gameState.phase !== 'reveal_card') return;
 
         let gameState = room.gameState;
-        // Make sure the right person is revealing
         if (socket.id !== gameState.playerToReveal.id) return;
 
         const player = gameState.players.find(p => p.id === socket.id);
         const cardIndex = player.cards.indexOf(cardName);
+        const reason = gameState.playerToReveal.reason;
 
         if (cardIndex > -1) {
-            // Move the card from their hand to their revealed cards
             player.revealedCards.push(player.cards.splice(cardIndex, 1)[0]);
             gameState.actionLog.push(`${player.name} reveals their ${cardName}.`);
 
-            // Check if the player is eliminated
             if (player.cards.length === 0) {
                 player.isAlive = false;
                 gameState.actionLog.push(`${player.name} has been eliminated!`);
-
                 const alivePlayers = gameState.players.filter(p => p.isAlive);
                 if (alivePlayers.length === 1) {
                     const winner = alivePlayers[0];
-                    gameState.phase = 'game_over'; // New phase
+                    gameState.phase = 'game_over';
                     gameState.actionLog.push(`${winner.name} is the last one standing and wins the game!`);
                     io.to(roomId).emit('gameUpdate', gameState);
-                    return; // Stop the function here, game is over
+                    return;
                 }
             }
         }
-        
-        // Reset phase and advance turn
+
+        // --- NEW LOGIC: Decide what to do based on the REASON for the reveal ---
+        if (reason === 'Failed Challenge' || reason === 'Failed Block Challenge') {
+            // The original action was legitimate and now must be resolved.
+            const { action, actorId, targetId } = gameState.pendingAction;
+            const actor = gameState.players.find(p => p.id === actorId);
+            const target = gameState.players.find(p => p.id === targetId);
+
+            gameState.actionLog.push(`The original action now proceeds.`);
+
+            if (action.toLowerCase() === 'steal') {
+                const coinsToSteal = Math.min(target.coins, 2);
+                actor.coins += coinsToSteal;
+                target.coins -= coinsToSteal;
+                gameState.actionLog.push(`${actor.name} steals ${coinsToSteal} coins from ${target.name}.`);
+            } else if (action.toLowerCase() === 'assassinate') {
+                actor.coins -= 3;
+                gameState.phase = 'reveal_card'; // The target must now reveal a card
+                gameState.playerToReveal = { id: targetId, reason: 'Assassinated' };
+                io.to(roomId).emit('gameUpdate', gameState); // Send update and wait for second reveal
+                return; // IMPORTANT: Stop here, don't advance turn yet.
+            }
+            // Add other actions like Tax here if they get challenged
+        }
+
+        // For all other cases (Caught Bluffing, Overthrown, etc.) or after a successful action,
+        // we clean up and advance the turn.
         gameState.phase = 'action';
         gameState.playerToReveal = null;
+        gameState.pendingAction = null;
+        gameState.pendingBlock = null;
         gameState.passedPlayers = [];
         gameState = advanceTurn(gameState);
 
