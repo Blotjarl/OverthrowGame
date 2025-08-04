@@ -1,437 +1,453 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Overthrow Game</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overthrow Game</title>
+    <style>
+        /* Basic CSS Reset & Font */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        /* Lobby and Room Styling */
+        #lobby, #room {
+            max-width: 400px;
+            margin: 40px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        input[type="text"], button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        /* --- NEW GAME UI STYLES --- */
+
+        /* Main Game Container - Flexbox Layout */
+        #game-container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        /* Game Board Area */
+        #game-board {
+            flex-grow: 1; /* Takes up available space */
+        }
+
+        /* Player Grid - CSS Grid Layout */
+        #player-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3 columns */
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        /* Individual Player Box */
+        .player-box {
+            background: white;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: all 0.2s ease-in-out;
+        }
+
+        /* Highlight for the current player's turn */
+        .player-box.is-turn {
+            border-color: #007bff;
+            box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+        }
+        
+        /* Highlight for the player's own box */
+        .player-box.is-me {
+            background-color: #e7f3ff;
+        }
+        
+        .player-box h4 {
+            margin-top: 0;
+        }
+
+        /* Styling for revealed cards */
+        .revealed-cards {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        /* Player is eliminated */
+        .player-box.is-eliminated {
+            opacity: 0.5;
+            background-color: #f8f9fa;
+        }
+
+        /* Action Menu Area */
+        #action-menu {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 100px;
+        }
+        #action-menu button {
+            width: auto;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+
+        /* Sidebar for Action Log */
+        #sidebar {
+            width: 300px;
+            flex-shrink: 0; /* Prevents sidebar from shrinking */
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        #action-log {
+            height: 400px;
+            overflow-y: auto; /* Makes the log scrollable */
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+
+    </style>
 </head>
 <body>
-  <h2>Overthrow Game</h2>
 
-  <div id="lobby">
-    <button onclick="createRoom()">Create Room</button>
-    
-    <h3>Join a Room</h3>
-    <input id="nameInput" type="text" placeholder="Enter your name">
-    <br><br>
-    <input id="roomInput" type="text" placeholder="Enter room code">
-    <button onclick="joinRoom()">Join Room</button>
-  </div>
+    <h2 style="text-align: center;">Overthrow</h2>
 
-  <div id="room" style="display: none;">
-    <p id="roomDisplay"></p>
-    <ul id="players"></ul>
-    <div id="start-game-container"></div> 
-    <button onclick="leaveRoom()">Leave Room</button>
-  </div>
+    <!-- Lobby and Room divs remain for pre-game -->
+    <div id="lobby">
+        <h3>Join or Create a Room</h3>
+        <input id="nameInput" type="text" placeholder="Enter your name">
+        <input id="roomInput" type="text" placeholder="Enter room code">
+        <button onclick="joinRoom()">Join Room</button>
+        <button onclick="createRoom()">Create Room</button>
+    </div>
 
-  <div id="game-container" style="display: none;">
-    <h3>Game Board</h3>
-    <div id="opponents-area"></div>
-    <hr>
-    <div id="player-area"></div>
-    <div id="action-menu"></div>
-    <hr>
-    <h4>Action Log</h4>
-    <div id="action-log"></div>
-  </div>
+    <div id="room" style="display: none;">
+        <p id="roomDisplay"></p>
+        <ul id="players"></ul>
+        <div id="start-game-container"></div> 
+        <button onclick="leaveRoom()">Leave Room</button>
+    </div>
 
-  <p id="status"></p>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-    let currentRoom = null;
-    let gameState = null; // Variable to hold the current game state
-    let selectedCards = [];
-    let selectingTargetFor = null;
-
-    socket.on('gameUpdate', (newGameState) => {
-      console.log('Received game update:', newGameState);
-      gameState = newGameState; // Overwrite the old state with the new one
-      renderGameState(); // Redraw the entire game board
-    });
-
-    socket.on('gameStarted', (initialGameState) => {
-      console.log('Game is starting!', initialGameState);
-      gameState = initialGameState;
-
-      // Hide lobby and room divs
-      document.getElementById('lobby').style.display = 'none';
-      document.getElementById('room').style.display = 'none';
-      
-      // Show the game container
-      document.getElementById('game-container').style.display = 'block';
-
-      renderGameState();
-    });
-
-    function revealCard(cardName) {
-      console.log(`Revealing card: ${cardName}`);
-      socket.emit('revealCard', { roomId: currentRoom, cardName: cardName });
-    }
-
-    function respondToAction(response) {
-      console.log(`Responding to action with: ${response}`);
-      socket.emit('challengeResponse', { roomId: currentRoom, response: response });
-    }
-
-    function cancelTargetSelection() {
-      selectingTargetFor = null;
-      renderGameState();
-    }
-
-    function declareBlock(blockType) {
-      console.log(`Declaring block with: ${blockType}`);
-      socket.emit('declareBlock', { roomId: currentRoom, blockType: blockType });
-    }
-
-    function respondToForeignAid(response) {
-      console.log(`Responding to Foreign Aid with: ${response}`);
-      socket.emit('foreignAidResponse', { roomId: currentRoom, response: response });
-    }
-
-    function respondToBlock(response) {
-      console.log(`Responding to block with: ${response}`);
-      // Emit a new event specifically for block responses
-      socket.emit('blockResponse', { roomId: currentRoom, response: response });
-    }
-
-    function initiateTargetedAction(action) {
-      selectingTargetFor = action; // Set the state to 'steal' or 'assassinate'
-      renderGameState(); // Re-draw the UI to show the target list
-    }
-
-    // This function redraws the entire game UI based on the current gameState
-    function renderGameState() {
-      if (!gameState) return;
-
-      const opponentsArea = document.getElementById('opponents-area');
-      const playerArea = document.getElementById('player-area');
-      const actionMenu = document.getElementById('action-menu');
-      const actionLog = document.getElementById('action-log');
-
-      // Clear previous state
-      opponentsArea.innerHTML = '<h4>Opponents</h4>';
-      playerArea.innerHTML = '';
-      actionMenu.innerHTML = '';
-
-      // Find the current player's data
-      const me = gameState.players.find(p => p.id === socket.id);
-      const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-      const myTurn = currentPlayer.id === socket.id;
-
-      // Render other players
-      gameState.players.forEach(player => {
-        if (player.id === socket.id) return; // Don't render myself here
-
-        const opponentDiv = document.createElement('div');
-        const isTheirTurn = gameState.players[gameState.currentPlayerIndex].id === player.id;
-        opponentDiv.innerHTML = `
-          <strong>${player.name} ${isTheirTurn ? ' (Turn)' : ''}</strong><br>
-          Coins: ${player.coins}<br>
-          Cards: ${player.cards.length}
-        `;
-        opponentsArea.appendChild(opponentDiv);
-      });
-
-      // Render my own area
-      if (me) {
-        playerArea.innerHTML = `
-          <h4>Your Hand (${me.name})</h4>
-          <p><strong>My Coins:</strong> ${me.coins}</p>
-          <p><strong>My Cards:</strong> ${me.cards.join(', ')}</p>
-        `;
-      }
-      
-      // Render action buttons if it's my turn
-      const mercyRuleActive = gameState.players.some(p => p.id !== socket.id && p.isAlive && p.cards.length === 2);
-      switch (gameState.phase) {
-        case 'action':
-           if (myTurn) {
-            // --- Check for the 10-coin rule FIRST ---
-            if (me.coins >= 10) {
-                actionMenu.innerHTML = `<h4>You have ${me.coins} coins and must Overthrow!</h4>`;
-                gameState.players.forEach(target => {
-                    // Mercy Rule Check:
-                    if (mercyRuleActive && target.cards.length === 1) return;
-
-                    if (target.id !== socket.id && target.isAlive) {
-                        actionMenu.innerHTML += `<button onclick="performAction('overthrow', '${target.id}')">Overthrow ${target.name}</button>`;
-                    }
-                });
-            } 
-            // --- If not forced to Overthrow, show normal options ---
-            else if (selectingTargetFor) {
-                actionMenu.innerHTML = `<h4>Who do you want to ${selectingTargetFor}?</h4>`;
-                gameState.players.forEach(target => {
-                    // Mercy Rule Check (only for these actions):
-                    if ((selectingTargetFor === 'overthrow' || selectingTargetFor === 'assassinate') && mercyRuleActive && target.cards.length === 1) {
-                        return; // Skip this target
-                    }
-
-                    if (target.id !== socket.id && target.isAlive) {
-                        actionMenu.innerHTML += `<button onclick="performAction('${selectingTargetFor}', '${target.id}')">${target.name}</button>`;
-                    }
-                });
-                actionMenu.innerHTML += `<button onclick="cancelTargetSelection()">Cancel</button>`;
-            } 
-            else {
-                // Main action menu
-                let actionsHtml = `
-                    <h4>Your Actions</h4>
-                    <button onclick="performAction('income')">Income</button>
-                    <button onclick="performAction('foreign_aid')">Foreign Aid</button>
-                    <button onclick="performAction('tax')">Tax (Duke)</button>
-                    <button onclick="performAction('exchange')">Exchange (Ambassador)</button>
-                    <button onclick="initiateTargetedAction('steal')">Steal (Captain)</button>
-                `;
-                if (me.coins >= 3) {
-                    actionsHtml += `<button onclick="initiateTargetedAction('assassinate')">Assassinate (Assassin)</button>`;
-                }
-                if (me.coins >= 7) {
-                    actionsHtml += `<button onclick="initiateTargetedAction('overthrow')">Overthrow</button>`;
-                }
-                actionMenu.innerHTML = actionsHtml;
-            }
-        }
-        break;
-    
-        case 'challenge':
-          case 'challenge':
-          const actor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
-          actionMenu.innerHTML = `<h4>${actor.name} is attempting to use ${gameState.pendingAction.action}!</h4>`;
-
-          // Show Challenge/Pass to everyone who is alive and NOT the person who took the action
-          if (actor.id !== socket.id && me.isAlive) {
-              actionMenu.innerHTML += `
-                  <button onclick="respondToAction('challenge')">Challenge</button>
-                  <button onclick="respondToAction('pass')">Pass</button>
-              `;
-          }
-          break;
-
-        case 'declare_block':
-          const actionInfo = gameState.pendingAction;
-          const target = gameState.players.find(p => p.id === actionInfo.targetId);
-          actionMenu.innerHTML = `<h4>Waiting for ${target.name} to respond to the ${actionInfo.action}...</h4>`;
-
-          // If YOU are the target of the action, show the block options
-          if (actionInfo.targetId === socket.id) {
-              let blockButtons = `<h4>Do you want to block the ${actionInfo.action}?</h4>`;
-              
-              // Show specific block buttons based on the action
-              if (actionInfo.action.toLowerCase() === 'steal') {
-                  blockButtons += `
-                      <button onclick="declareBlock('Captain')">Block with Captain</button>
-                      <button onclick="declareBlock('Ambassador')">Block with Ambassador</button>
-                  `;
-              } else if (actionInfo.action.toLowerCase() === 'assassinate') {
-                  blockButtons += `
-                      <button onclick="declareBlock('Contessa')">Block with Contessa</button>
-                  `;
-              }
-              
-              blockButtons += `<button onclick="declareBlock('No Block')">Do Not Block</button>`;
-              actionMenu.innerHTML = blockButtons;
-          }
-          break;
-
-        case 'block_declaration_period':
-            const foreignAidActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
-            actionMenu.innerHTML = `<h4>${foreignAidActor.name} is taking Foreign Aid!</h4>`;
-
-            // Show block/pass buttons to everyone who is alive and NOT the one taking the action
-            if (foreignAidActor.id !== socket.id && me.isAlive) {
-                actionMenu.innerHTML += `
-                    <button onclick="respondToForeignAid('block')">Block with Duke</button>
-                    <button onclick="respondToForeignAid('pass')">Pass</button>
-                `;
-            }
-            break;
-
-        case 'block_challenge':
-          const blocker = gameState.players.find(p => p.id === gameState.pendingBlock.blockerId);
-          const blockingCard = gameState.pendingBlock.blockingCard;
-
-          actionMenu.innerHTML = `<h4>${blocker.name} is attempting to BLOCK with a ${blockingCard}!</h4>`;
-
-          // Show challenge/pass buttons to everyone who is alive and NOT the one blocking
-          if (blocker.id !== socket.id && me.isAlive) {
-            actionMenu.innerHTML += `
-              <button onclick="respondToBlock('challenge')">Challenge Block</button>
-              <button onclick="respondToBlock('pass')">Pass</button>
-            `;
-          }
-          break;
-
-        case 'exchange_cards':
-          actionMenu.innerHTML = `<h4>Waiting for ${gameState.players.find(p => p.id === gameState.exchangeInfo.playerId).name} to exchange...</h4>`;
-
-          // If it's ME who is exchanging...
-          if (gameState.exchangeInfo.playerId === socket.id) {
-            actionMenu.innerHTML = `
-              <h4>You drew two cards. Choose which two to KEEP.</h4>
-              <div id="exchange-options"></div>
-            `;
-            const optionsContainer = document.getElementById('exchange-options');
-            gameState.exchangeInfo.options.forEach(card => {
-              optionsContainer.innerHTML += `<button onclick="selectExchangeCard('${card}')">${card}</button>`;
-            });
-          }
-          break;
+    <!-- NEW Game Container Layout -->
+    <div id="game-container" style="display: none;">
         
-        case 'reveal_card':
-          const playerToReveal = gameState.players.find(p => p.id === gameState.playerToReveal.id);
-          actionMenu.innerHTML = `<h4>Waiting for ${playerToReveal.name} to reveal a card...</h4>`;
+        <!-- Main Board Section -->
+        <div id="game-board">
+            <div id="player-grid">
+                <!-- Player boxes will be generated here by JavaScript -->
+            </div>
+            <div id="action-menu">
+                <!-- Action buttons will be generated here -->
+            </div>
+        </div>
 
-          // If it's ME who has to reveal...
-          if (gameState.playerToReveal.id === socket.id) {
-              let reasonMessage = 'You must reveal a card:'; // A good default
+        <!-- Sidebar Section -->
+        <div id="sidebar">
+            <h4>Action Log</h4>
+            <div id="action-log">
+                <!-- Log messages will be generated here -->
+            </div>
+        </div>
+    </div>
 
-              // Determine the message based on the reason from the server
-              switch (gameState.playerToReveal.reason) {
-                  case 'Overthrown':
-                      reasonMessage = 'You were Overthrown! Choose a card to reveal:';
-                      break;
-                  case 'Assassinated':
-                      reasonMessage = 'You were Assassinated! Choose a card to reveal:';
-                      break;
-                  case 'Failed Challenge':
-                      reasonMessage = 'Your challenge failed. Choose a card to reveal:';
-                      break;
-                  case 'Caught Bluffing':
-                      reasonMessage = 'You were caught bluffing. Choose a card to reveal:';
-                      break;
-                  case 'Caught Bluffing Block':
-                      reasonMessage = 'You were caught bluffing a block. Choose a card to reveal:';
-                      break;
-                  case 'Failed Block Challenge':
-                      reasonMessage = 'Your challenge on the block failed. Choose a card to reveal:';
-                      break;
-              }
+    <p id="status" style="text-align: center; margin-top: 20px;"></p>
 
-              actionMenu.innerHTML = `
-                  <h4>${reasonMessage}</h4>
-                  <button onclick="revealCard('${me.cards[0]}')">${me.cards[0]}</button>
-                  ${me.cards.length > 1 ? `<button onclick="revealCard('${me.cards[1]}')">${me.cards[1]}</button>` : ''}
-              `;
-          }
-          break;
-      }
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // --- All your existing socket logic and functions (createRoom, joinRoom, etc.) remain the same ---
+        const socket = io();
+        let currentRoom = null;
+        let gameState = null;
+        let selectedCards = [];
+        let selectingTargetFor = null;
 
-      // Render action log
-      actionLog.innerHTML = gameState.actionLog.join('<br>');
-    }
+        socket.on('gameUpdate', (newGameState) => {
+            console.log('Received game update:', newGameState);
+            gameState = newGameState;
+            renderGameState();
+        });
 
-    function performAction(action, targetId = null) {
-      console.log(`Attempting to perform action: ${action}`, targetId ? `on target ${targetId}` : '');
-      socket.emit('performAction', { roomId: currentRoom, action, targetId });
+        socket.on('gameStarted', (initialGameState) => {
+            console.log('Game is starting!', initialGameState);
+            gameState = initialGameState;
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('room').style.display = 'none';
+            document.getElementById('game-container').style.display = 'flex'; // Use flex to show it
+            renderGameState();
+        });
 
-      // Reset the targeting state after performing the action
-      selectingTargetFor = null; 
-    }
-
-    // Handle starting the game
-    function startGame() {
-      console.log('Starting game in room:', currentRoom);
-      socket.emit('startGame', currentRoom);
-    }
-
-    // On connect
-    socket.on('connect', () => {
-      document.getElementById('status').innerText = `Connected! Your ID: ${socket.id}`;
-    });
-
-    // Create room
-    function createRoom() {
-      const username = document.getElementById('nameInput').value.trim();
-      if (username) {
-        socket.emit('createRoom', { username });
-    } else {
-        alert('Please enter a name!');
-      }
-    }
-
-    // Join room
-    function joinRoom() {
-      const username = document.getElementById('nameInput').value.trim();
-      const roomId = document.getElementById('roomInput').value.trim();
-      if (username && roomId) {
-        socket.emit('joinRoom', { roomId, username });
-      } else {
-        alert('Please enter your name and a room code!');
-      }
-    }
-
-    // Leave room
-    function leaveRoom() {
-      socket.emit('leaveRoom', currentRoom);
-      currentRoom = null;
-      document.getElementById('room').style.display = 'none';
-      document.getElementById('lobby').style.display = 'block';
-    }
-
-    // Server sends new room ID
-    socket.on('roomCreated', (roomId) => {
-      currentRoom = roomId;
-      showRoom(roomId);
-    });
-
-    // Update room player list
-    socket.on('roomUpdate', (room) => { // 'room' is now an object { hostId, players }
-      if (!currentRoom) {
-        const roomId = document.getElementById('roomInput').value.trim();
-        showRoom(roomId);
-      }
-
-      // Update player list (now using room.players)
-      const list = document.getElementById('players');
-      list.innerHTML = '';
-      room.players.forEach((player) => {
-        const li = document.createElement('li');
-        li.textContent = player.name;
-        if (player.id === socket.id) {
-            li.textContent += ' (You)';
-            li.style.fontWeight = 'bold';
+        // --- All your action functions (revealCard, respondToAction, etc.) remain the same ---
+        function revealCard(cardName) {
+            socket.emit('revealCard', { roomId: currentRoom, cardName: cardName });
         }
-        list.appendChild(li);
-      });
+        function respondToAction(response) {
+            socket.emit('challengeResponse', { roomId: currentRoom, response: response });
+        }
+        function cancelTargetSelection() {
+            selectingTargetFor = null;
+            renderGameState();
+        }
+        function declareBlock(blockType) {
+            socket.emit('declareBlock', { roomId: currentRoom, blockType: blockType });
+        }
+        function respondToForeignAid(response) {
+            socket.emit('foreignAidResponse', { roomId: currentRoom, response: response });
+        }
+        function respondToBlock(response) {
+            socket.emit('blockResponse', { roomId: currentRoom, response: response });
+        }
+        function initiateTargetedAction(action) {
+            selectingTargetFor = action;
+            renderGameState();
+        }
+        function performAction(action, targetId = null) {
+            socket.emit('performAction', { roomId: currentRoom, action, targetId });
+            selectingTargetFor = null; 
+        }
+        function selectExchangeCard(cardName) {
+            selectedCards.push(cardName);
+            if (selectedCards.length === 2) {
+                socket.emit('returnExchangeCards', { roomId: currentRoom, keptCards: selectedCards });
+                selectedCards = [];
+            }
+        }
 
-      // Logic to show/hide the "Start Game" button
-      const startButtonContainer = document.getElementById('start-game-container');
-      // For a 2+ player game
-      if (room.hostId === socket.id && room.players.length >= 2) {
-        startButtonContainer.innerHTML = '<button onclick="startGame()">Start Game</button>';
-      } else {
-        startButtonContainer.innerHTML = ''; // Clear the button if conditions aren't met
-      }
-    });
+        // --- COMPLETELY NEW renderGameState FUNCTION ---
+        function renderGameState() {
+            if (!gameState) return;
 
-    // Show error messages
-    socket.on('errorMessage', (msg) => {
-      alert(msg);
-    });
+            const playerGrid = document.getElementById('player-grid');
+            const actionMenu = document.getElementById('action-menu');
+            const actionLog = document.getElementById('action-log');
 
-    // Helper to display room UI
-    function showRoom(roomId) {
-      currentRoom = roomId;
-      document.getElementById('roomDisplay').innerText = `You are in Room: ${roomId}`;
-      document.getElementById('lobby').style.display = 'none';
-      document.getElementById('room').style.display = 'block';
-    }
+            playerGrid.innerHTML = ''; // Clear the grid
 
-    function selectExchangeCard(cardName) {
-      // Add card to selection
-      selectedCards.push(cardName);
+            const me = gameState.players.find(p => p.id === socket.id);
+            const mercyRuleActive = gameState.players.some(p => p.id !== socket.id && p.isAlive && p.cards.length === 2);
 
-      // Once two cards are selected, send them to the server
-      if (selectedCards.length === 2) {
-        socket.emit('returnExchangeCards', { roomId: currentRoom, keptCards: selectedCards });
-        selectedCards = []; // Reset for next time
-      }
-}
-  </script>
+            // --- Render each player in the grid ---
+            gameState.players.forEach((player, index) => {
+                const playerBox = document.createElement('div');
+                playerBox.className = 'player-box';
+                
+                if (player.id === socket.id) playerBox.classList.add('is-me');
+                if (index === gameState.currentPlayerIndex) playerBox.classList.add('is-turn');
+                if (!player.isAlive) playerBox.classList.add('is-eliminated');
 
+                let revealedHtml = player.revealedCards.length > 0
+                    ? `<p>Revealed: <span class="revealed-cards">${player.revealedCards.join(', ')}</span></p>`
+                    : '';
+                
+                // For your own player, show your cards. For others, show card count.
+                let cardsHtml = player.id === socket.id
+                    ? `<p><strong>Cards:</strong> ${player.cards.join(', ')}</p>`
+                    : `<p><strong>Cards:</strong> ${player.cards.length}</p>`;
+
+                playerBox.innerHTML = `
+                    <h4>${player.name} ${player.id === socket.id ? '(You)' : ''}</h4>
+                    <p><strong>Coins:</strong> ${player.coins}</p>
+                    ${cardsHtml}
+                    ${revealedHtml}
+                `;
+                playerGrid.appendChild(playerBox);
+            });
+
+            // --- Render the Action Menu (your existing logic is moved here) ---
+            actionMenu.innerHTML = ''; // Clear the menu
+            const myTurn = gameState.players[gameState.currentPlayerIndex].id === socket.id;
+
+            switch (gameState.phase) {
+                // All your existing case logic for the action menu goes here...
+                case 'action':
+                    if (myTurn) {
+                        if (me.coins >= 10) {
+                            actionMenu.innerHTML = `<h4>You have ${me.coins} coins and must Overthrow!</h4>`;
+                            gameState.players.forEach(target => {
+                                if (mercyRuleActive && target.cards.length === 1) return;
+                                if (target.id !== socket.id && target.isAlive) {
+                                    actionMenu.innerHTML += `<button onclick="performAction('overthrow', '${target.id}')">Overthrow ${target.name}</button>`;
+                                }
+                            });
+                        } else if (selectingTargetFor) {
+                            actionMenu.innerHTML = `<h4>Who do you want to ${selectingTargetFor}?</h4>`;
+                            gameState.players.forEach(target => {
+                                if ((selectingTargetFor === 'overthrow' || selectingTargetFor === 'assassinate') && mercyRuleActive && target.cards.length === 1) return;
+                                if (target.id !== socket.id && target.isAlive) {
+                                    actionMenu.innerHTML += `<button onclick="performAction('${selectingTargetFor}', '${target.id}')">${target.name}</button>`;
+                                }
+                            });
+                            actionMenu.innerHTML += `<button onclick="cancelTargetSelection()">Cancel</button>`;
+                        } else {
+                            let actionsHtml = `<h4>Your Actions</h4>`;
+                            actionsHtml += `<button onclick="performAction('income')">Income</button>`;
+                            actionsHtml += `<button onclick="performAction('foreign_aid')">Foreign Aid</button>`;
+                            actionsHtml += `<button onclick="performAction('tax')">Tax (Duke)</button>`;
+                            actionsHtml += `<button onclick="performAction('exchange')">Exchange (Ambassador)</button>`;
+                            actionsHtml += `<button onclick="initiateTargetedAction('steal')">Steal (Captain)</button>`;
+                            if (me.coins >= 3) actionsHtml += `<button onclick="initiateTargetedAction('assassinate')">Assassinate (Assassin)</button>`;
+                            if (me.coins >= 7) actionsHtml += `<button onclick="initiateTargetedAction('overthrow')">Overthrow</button>`;
+                            actionMenu.innerHTML = actionsHtml;
+                        }
+                    }
+                    break;
+                case 'challenge':
+                    const actor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
+                    actionMenu.innerHTML = `<h4>${actor.name} is attempting to use ${gameState.pendingAction.action}!</h4>`;
+                    if (actor.id !== socket.id && me.isAlive) {
+                        actionMenu.innerHTML += `<button onclick="respondToAction('challenge')">Challenge</button> <button onclick="respondToAction('pass')">Pass</button>`;
+                    }
+                    break;
+                case 'declare_block':
+                     const actionInfo = gameState.pendingAction;
+                     const target = gameState.players.find(p => p.id === actionInfo.targetId);
+                     actionMenu.innerHTML = `<h4>Waiting for ${target.name} to respond...</h4>`;
+                     if (actionInfo.targetId === socket.id) {
+                         let blockButtons = `<h4>Do you want to block the ${actionInfo.action}?</h4>`;
+                         if (actionInfo.action.toLowerCase() === 'steal') {
+                             blockButtons += `<button onclick="declareBlock('Captain')">Block with Captain</button> <button onclick="declareBlock('Ambassador')">Block with Ambassador</button>`;
+                         } else if (actionInfo.action.toLowerCase() === 'assassinate') {
+                             blockButtons += `<button onclick="declareBlock('Contessa')">Block with Contessa</button>`;
+                         }
+                         blockButtons += `<button onclick="declareBlock('No Block')">Do Not Block</button>`;
+                         actionMenu.innerHTML = blockButtons;
+                     }
+                     break;
+                 case 'block_declaration_period':
+                     const foreignAidActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
+                     actionMenu.innerHTML = `<h4>${foreignAidActor.name} is taking Foreign Aid!</h4>`;
+                     if (foreignAidActor.id !== socket.id && me.isAlive) {
+                         actionMenu.innerHTML += `<button onclick="respondToForeignAid('block')">Block with Duke</button> <button onclick="respondToForeignAid('pass')">Pass</button>`;
+                     }
+                     break;
+                 case 'block_challenge':
+                     const blocker = gameState.players.find(p => p.id === gameState.pendingBlock.blockerId);
+                     actionMenu.innerHTML = `<h4>${blocker.name} is attempting to BLOCK with a ${gameState.pendingBlock.blockingCard}!</h4>`;
+                     if (blocker.id !== socket.id && me.isAlive) {
+                         actionMenu.innerHTML += `<button onclick="respondToBlock('challenge')">Challenge Block</button> <button onclick="respondToBlock('pass')">Pass</button>`;
+                     }
+                     break;
+                 case 'exchange_cards':
+                     actionMenu.innerHTML = `<h4>Waiting for ${gameState.players.find(p => p.id === gameState.exchangeInfo.playerId).name} to exchange...</h4>`;
+                     if (gameState.exchangeInfo.playerId === socket.id) {
+                         actionMenu.innerHTML = `<h4>You drew two cards. Choose which two to KEEP.</h4>`;
+                         gameState.exchangeInfo.options.forEach(card => {
+                             actionMenu.innerHTML += `<button onclick="selectExchangeCard('${card}')">${card}</button>`;
+                         });
+                     }
+                     break;
+                 case 'reveal_card':
+                     const playerToReveal = gameState.players.find(p => p.id === gameState.playerToReveal.id);
+                     actionMenu.innerHTML = `<h4>Waiting for ${playerToReveal.name} to reveal a card...</h4>`;
+                     if (gameState.playerToReveal.id === socket.id) {
+                         let reasonMessage = 'You must reveal a card:';
+                         // ... (your existing switch for reasonMessage) ...
+                         actionMenu.innerHTML = `<h4>${gameState.playerToReveal.reason}! Choose a card to reveal:</h4>`;
+                         me.cards.forEach(card => {
+                            actionMenu.innerHTML += `<button onclick="revealCard('${card}')">${card}</button>`;
+                         });
+                     }
+                     break;
+                 case 'game_over':
+                     actionMenu.innerHTML = `<h2>Game Over</h2>`;
+                     break;
+            }
+
+            // --- Render the Action Log ---
+            actionLog.innerHTML = gameState.actionLog.join('<br>');
+            actionLog.scrollTop = actionLog.scrollHeight; // Auto-scroll to the bottom
+        }
+
+        // --- Your existing pre-game functions (createRoom, joinRoom, etc.) ---
+        function createRoom() {
+            const username = document.getElementById('nameInput').value.trim();
+            if (username) {
+                socket.emit('createRoom', { username });
+            } else {
+                alert('Please enter a name!');
+            }
+        }
+        function joinRoom() {
+            const username = document.getElementById('nameInput').value.trim();
+            const roomId = document.getElementById('roomInput').value.trim();
+            if (username && roomId) {
+                socket.emit('joinRoom', { roomId, username });
+            } else {
+                alert('Please enter your name and a room code!');
+            }
+        }
+        function leaveRoom() {
+            window.location.reload();
+        }
+        socket.on('roomCreated', (roomId) => {
+            currentRoom = roomId;
+            showRoom(roomId);
+        });
+        socket.on('roomUpdate', (room) => {
+            if (!currentRoom) {
+                const roomId = document.getElementById('roomInput').value.trim();
+                showRoom(roomId);
+            }
+            const list = document.getElementById('players');
+            list.innerHTML = '';
+            room.players.forEach((player) => {
+                const li = document.createElement('li');
+                li.textContent = player.name;
+                if (player.id === socket.id) {
+                    li.textContent += ' (You)';
+                    li.style.fontWeight = 'bold';
+                }
+                list.appendChild(li);
+            });
+            const startButtonContainer = document.getElementById('start-game-container');
+            if (room.hostId === socket.id && room.players.length >= 2) {
+                startButtonContainer.innerHTML = '<button onclick="startGame()">Start Game</button>';
+            } else {
+                startButtonContainer.innerHTML = '';
+            }
+        });
+        socket.on('errorMessage', (msg) => {
+            alert(msg);
+        });
+        function showRoom(roomId) {
+            currentRoom = roomId;
+            document.getElementById('roomDisplay').innerText = `You are in Room: ${roomId}`;
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('room').style.display = 'block';
+        }
+        function startGame() {
+            socket.emit('startGame', currentRoom);
+        }
+        socket.on('connect', () => {
+            document.getElementById('status').innerText = `Connected! Your ID: ${socket.id}`;
+        });
+    </script>
 </body>
 </html>
