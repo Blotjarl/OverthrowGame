@@ -145,41 +145,56 @@
       }
       
       // Render action buttons if it's my turn
+      const mercyRuleActive = gameState.players.some(p => p.id !== socket.id && p.isAlive && p.cards.length === 2);
       switch (gameState.phase) {
         case 'action':
-          if (myTurn) {
-            // If we are currently selecting a target for an action...
-            if (selectingTargetFor) {
-              actionMenu.innerHTML = `<h4>Who do you want to ${selectingTargetFor}?</h4>`;
-              gameState.players.forEach(target => {
-                if (target.id !== socket.id && target.isAlive) {
-                  // Pass both the action and the target's ID
-                  actionMenu.innerHTML += `<button onclick="performAction('${selectingTargetFor}', '${target.id}')">${target.name}</button>`;
-                }
-              });
-              // Add a cancel button
-              actionMenu.innerHTML += `<button onclick="cancelTargetSelection()">Cancel</button>`;
+           if (myTurn) {
+            // --- Check for the 10-coin rule FIRST ---
+            if (me.coins >= 10) {
+                actionMenu.innerHTML = `<h4>You have ${me.coins} coins and must Overthrow!</h4>`;
+                gameState.players.forEach(target => {
+                    // Mercy Rule Check:
+                    if (mercyRuleActive && target.cards.length === 1) return;
+
+                    if (target.id !== socket.id && target.isAlive) {
+                        actionMenu.innerHTML += `<button onclick="performAction('overthrow', '${target.id}')">Overthrow ${target.name}</button>`;
+                    }
+                });
             } 
-            // Otherwise, show the normal list of actions
+            // --- If not forced to Overthrow, show normal options ---
+            else if (selectingTargetFor) {
+                actionMenu.innerHTML = `<h4>Who do you want to ${selectingTargetFor}?</h4>`;
+                gameState.players.forEach(target => {
+                    // Mercy Rule Check (only for these actions):
+                    if ((selectingTargetFor === 'overthrow' || selectingTargetFor === 'assassinate') && mercyRuleActive && target.cards.length === 1) {
+                        return; // Skip this target
+                    }
+
+                    if (target.id !== socket.id && target.isAlive) {
+                        actionMenu.innerHTML += `<button onclick="performAction('${selectingTargetFor}', '${target.id}')">${target.name}</button>`;
+                    }
+                });
+                actionMenu.innerHTML += `<button onclick="cancelTargetSelection()">Cancel</button>`;
+            } 
             else {
-              let actionsHtml = `
-                <h4>Your Actions</h4>
-                <button onclick="performAction('income')">Income</button>
-                <button onclick="performAction('foreign_aid')">Foreign Aid</button>
-                <button onclick="performAction('tax')">Tax (Duke)</button>
-                <!-- These now call the new function -->
-                <button onclick="initiateTargetedAction('steal')">Steal (Captain)</button>
-              `;
-              if (me.coins >= 3) {
-                actionsHtml += `<button onclick="initiateTargetedAction('assassinate')">Assassinate (Assassin)</button>`;
-              }
-              if (me.coins >= 7) {
-                actionsHtml += `<button onclick="initiateTargetedAction('coup')">Coup</button>`;
-              }
-              actionMenu.innerHTML = actionsHtml;
+                // Main action menu
+                let actionsHtml = `
+                    <h4>Your Actions</h4>
+                    <button onclick="performAction('income')">Income</button>
+                    <button onclick="performAction('foreign_aid')">Foreign Aid</button>
+                    <button onclick="performAction('tax')">Tax (Duke)</button>
+                    <button onclick="initiateTargetedAction('steal')">Steal (Captain)</button>
+                `;
+                if (me.coins >= 3) {
+                    actionsHtml += `<button onclick="initiateTargetedAction('assassinate')">Assassinate (Assassin)</button>`;
+                }
+                if (me.coins >= 7) {
+                    actionsHtml += `<button onclick="initiateTargetedAction('overthrow')">Overthrow</button>`;
+                }
+                actionMenu.innerHTML = actionsHtml;
             }
-          }
-          break;
+        }
+        break;
     
         case 'challenge':
           case 'challenge':
@@ -203,17 +218,23 @@
           // If YOU are the target of the action, show the block options
           if (actionInfo.targetId === socket.id) {
               let blockButtons = `<h4>Do you want to block the ${actionInfo.action}?</h4>`;
+              
+              // Show specific block buttons based on the action
               if (actionInfo.action.toLowerCase() === 'steal') {
                   blockButtons += `
                       <button onclick="declareBlock('Captain')">Block with Captain</button>
                       <button onclick="declareBlock('Ambassador')">Block with Ambassador</button>
                   `;
+              } else if (actionInfo.action.toLowerCase() === 'assassinate') {
+                  blockButtons += `
+                      <button onclick="declareBlock('Contessa')">Block with Contessa</button>
+                  `;
               }
-              // We can add 'assassinate' logic here later
+              
               blockButtons += `<button onclick="declareBlock('No Block')">Do Not Block</button>`;
               actionMenu.innerHTML = blockButtons;
           }
-          break;  
+          break;
 
         case 'block_declaration_period':
             const foreignAidActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
@@ -265,15 +286,36 @@
 
           // If it's ME who has to reveal...
           if (gameState.playerToReveal.id === socket.id) {
-            actionMenu.innerHTML = `
-              <h4>You lost the challenge. Choose a card to reveal:</h4>
-              <button onclick="revealCard('${me.cards[0]}')">${me.cards[0]}</button>
-              ${me.cards[1] ? `<button onclick="revealCard('${me.cards[1]}')">${me.cards[1]}</button>` : ''}
-            `;
+              let reasonMessage = 'You must reveal a card:'; // A good default
+
+              // Determine the message based on the reason from the server
+              switch (gameState.playerToReveal.reason) {
+                  case 'Overthrown':
+                      reasonMessage = 'You were Overthrown! Choose a card to reveal:';
+                      break;
+                  case 'Assassinated':
+                      reasonMessage = 'You were Assassinated! Choose a card to reveal:';
+                      break;
+                  case 'Failed Challenge':
+                      reasonMessage = 'Your challenge failed. Choose a card to reveal:';
+                      break;
+                  case 'Caught Bluffing':
+                      reasonMessage = 'You were caught bluffing. Choose a card to reveal:';
+                      break;
+                  case 'Caught Bluffing Block':
+                      reasonMessage = 'You were caught bluffing a block. Choose a card to reveal:';
+                      break;
+                  case 'Failed Block Challenge':
+                      reasonMessage = 'Your challenge on the block failed. Choose a card to reveal:';
+                      break;
+              }
+
+              actionMenu.innerHTML = `
+                  <h4>${reasonMessage}</h4>
+                  <button onclick="revealCard('${me.cards[0]}')">${me.cards[0]}</button>
+                  ${me.cards.length > 1 ? `<button onclick="revealCard('${me.cards[1]}')">${me.cards[1]}</button>` : ''}
+              `;
           }
-          break;
-        case 'game_over':
-          actionMenu.innerHTML = `<h2>Game Over</h2>`;
           break;
       }
 

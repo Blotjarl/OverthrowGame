@@ -335,13 +335,19 @@ io.on('connection', (socket) => {
                 actor.coins += coinsToSteal;
                 blocker.coins -= coinsToSteal;
                 gameState.actionLog.push(`${actor.name} steals ${coinsToSteal} coins from ${blocker.name}.`);
-            }
-            // We will add logic for 'assassinate' here later
 
-            // Reset for the next turn
-            gameState.phase = 'action';
-            gameState.pendingAction = null;
-            gameState = advanceTurn(gameState);
+                // Reset for the next turn
+                gameState.phase = 'action';
+                gameState.pendingAction = null;
+                gameState = advanceTurn(gameState);
+
+            } else if (originalAction.toLowerCase() === 'assassinate') {
+                // The assassination succeeds, target must reveal a card.
+                actor.coins -= 3; // Pay the cost
+                gameState.phase = 'reveal_card';
+                gameState.playerToReveal = { id: targetId, reason: 'Assassinated' };
+                gameState.pendingAction = null; // Clear the pending action
+            }
 
         } else {
             // --- The player IS declaring a block ---
@@ -371,6 +377,24 @@ io.on('connection', (socket) => {
 
         const player = gameState.players[playerIndex];
         
+        if (action.toLowerCase() === 'overthrow') {
+                if (player.coins < 7) {
+                    console.log("Not enough coins for Overthrow");
+                    return; 
+                }
+
+                player.coins -= 7;
+                const target = gameState.players.find(p => p.id === targetId);
+                gameState.actionLog.push(`${player.name} pays 7 coins to Overthrow ${target.name}! This cannot be blocked.`);
+
+                // Go directly to the reveal phase for the target
+                gameState.phase = 'reveal_card';
+                gameState.playerToReveal = { id: targetId, reason: 'Overthrown' };
+                
+                io.to(roomId).emit('gameUpdate', gameState);
+                return; // The action is handled, so we stop the function here.
+            }
+
         // --- Handle simple actions that don't have challenges ---
         if (action === 'income') {
             player.coins += 1;
