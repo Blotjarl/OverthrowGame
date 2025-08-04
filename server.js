@@ -59,7 +59,9 @@ io.on('connection', (socket) => {
         const player = gameState.players.find(p => p.id === socket.id);
         const cardIndex = player.cards.indexOf(cardName);
         const reason = gameState.playerToReveal.reason;
+        const pendingAction = gameState.pendingAction; // Keep a reference to the original action
 
+        // Reveal the card and check for elimination
         if (cardIndex > -1) {
             player.revealedCards.push(player.cards.splice(cardIndex, 1)[0]);
             gameState.actionLog.push(`${player.name} reveals their ${cardName}.`);
@@ -73,44 +75,51 @@ io.on('connection', (socket) => {
                     gameState.phase = 'game_over';
                     gameState.actionLog.push(`${winner.name} is the last one standing and wins the game!`);
                     io.to(roomId).emit('gameUpdate', gameState);
-                    return;
+                    return; // Game over
                 }
             }
         }
 
-        // --- NEW LOGIC: Decide what to do based on the REASON for the reveal ---
-        if (reason === 'Failed Challenge' || reason === 'Failed Block Challenge') {
-            // The original action was legitimate and now must be resolved.
-            const { action, actorId, targetId } = gameState.pendingAction;
-            const actor = gameState.players.find(p => p.id === actorId);
-            const target = gameState.players.find(p => p.id === targetId);
+        // --- NEW, SMARTER LOGIC ---
+        let turnShouldAdvance = true;
 
-            gameState.actionLog.push(`The original action now proceeds.`);
+        // Check if the original action should now proceed
+        if ((reason === 'Failed Challenge' || reason === 'Caught Bluffing Block') && pendingAction) {
+            gameState.actionLog.push(`The original action (${pendingAction.action}) now proceeds.`);
+            
+            const actor = gameState.players.find(p => p.id === pendingAction.actorId);
+            const target = gameState.players.find(p => p.id === pendingAction.targetId);
 
-            if (action.toLowerCase() === 'steal') {
-                const coinsToSteal = Math.min(target.coins, 2);
-                actor.coins += coinsToSteal;
-                target.coins -= coinsToSteal;
-                gameState.actionLog.push(`${actor.name} steals ${coinsToSteal} coins from ${target.name}.`);
-            } else if (action.toLowerCase() === 'assassinate') {
-                actor.coins -= 3;
-                gameState.phase = 'reveal_card'; // The target must now reveal a card
-                gameState.playerToReveal = { id: targetId, reason: 'Assassinated' };
-                io.to(roomId).emit('gameUpdate', gameState); // Send update and wait for second reveal
-                return; // IMPORTANT: Stop here, don't advance turn yet.
+            switch (pendingAction.action.toLowerCase()) {
+                case 'steal':
+                    const coinsToSteal = Math.min(target.coins, 2);
+                    actor.coins += coinsToSteal;
+                    target.coins -= coinsToSteal;
+                    gameState.actionLog.push(`${actor.name} steals ${coinsToSteal} coins from ${target.name}.`);
+                    break;
+                case 'assassinate':
+                    actor.coins -= 3;
+                    gameState.phase = 'reveal_card';
+                    gameState.playerToReveal = { id: target.id, reason: 'Assassinated' };
+                    turnShouldAdvance = false; // Wait for the second reveal
+                    break;
+                case 'tax':
+                    actor.coins += 3;
+                    gameState.actionLog.push(`${actor.name} gains 3 coins from Tax.`);
+                    break;
             }
-            // Add other actions like Tax here if they get challenged
         }
 
-        // For all other cases (Caught Bluffing, Overthrown, etc.) or after a successful action,
-        // we clean up and advance the turn.
-        gameState.phase = 'action';
-        gameState.playerToReveal = null;
-        gameState.pendingAction = null;
-        gameState.pendingBlock = null;
-        gameState.passedPlayers = [];
-        gameState = advanceTurn(gameState);
-
+        // If the turn should advance, clean up the game state.
+        if (turnShouldAdvance) {
+            gameState.phase = 'action';
+            gameState.playerToReveal = null;
+            gameState.pendingAction = null;
+            gameState.pendingBlock = null;
+            gameState.passedPlayers = [];
+            gameState = advanceTurn(gameState);
+        }
+        
         io.to(roomId).emit('gameUpdate', gameState);
     });
 
@@ -120,57 +129,49 @@ io.on('connection', (socket) => {
 
         let gameState = room.gameState;
         const responderId = socket.id;
-        const { blockerId, requiredCard } = gameState.pendingBlock;
+        // --- FIX IS HERE: Use blockingCard, not requiredCard ---
+        const { blockerId, blockingCard } = gameState.pendingBlock; 
         const blocker = gameState.players.find(p => p.id === blockerId);
 
-        // --- VALIDATION: Ensure responder is alive and not the blocker ---
         const responder = gameState.players.find(p => p.id === responderId);
         if (!responder || !responder.isAlive || responder.id === blockerId) return;
-
 
         if (response === 'challenge') {
             gameState.actionLog.push(`${responder.name} challenges ${blocker.name}'s block!`);
 
-            // Check if the blocker actually has one of the required cards
-            const hasBlockCard = Array.isArray(requiredCard)
-                ? requiredCard.some(card => blocker.cards.includes(card))
-                : blocker.cards.includes(requiredCard);
+            // --- FIX IS HERE: Check for blockingCard ---
+            const hasBlockCard = Array.isArray(blockingCard)
+                ? blockingCard.some(card => blocker.cards.includes(card))
+                : blocker.cards.includes(blockingCard);
 
             if (hasBlockCard) {
                 // --- BLOCK CHALLENGE FAILED ---
-                // The blocker was telling the truth. The challenger loses a card.
                 gameState.actionLog.push(`${blocker.name} reveals a valid block card! The challenge fails.`);
                 gameState.phase = 'reveal_card';
                 gameState.playerToReveal = { id: responder.id, reason: 'Failed Block Challenge' };
-
-                // The original action is successfully blocked.
                 gameState.actionLog.push(`The original action is blocked.`);
                 
-                // Find the revealed card, shuffle it back, and draw a new one for the blocker.
-                const cardToReveal = Array.isArray(requiredCard)
-                    ? requiredCard.find(card => blocker.cards.includes(card))
-                    : requiredCard;
+                // --- FIX IS HERE: Find the correct blockingCard to reveal ---
+                const cardToReveal = Array.isArray(blockingCard)
+                    ? blockingCard.find(card => blocker.cards.includes(card))
+                    : blockingCard;
                 const cardIndex = blocker.cards.indexOf(cardToReveal);
                 blocker.cards.splice(cardIndex, 1);
-                gameState.deck.push(cardToReveal);
-                shuffle(gameState.deck);
+                gameState.deck.unshift(cardToReveal);
                 blocker.cards.push(gameState.deck.pop());
+                gameState.actionLog.push(`${blocker.name} returns their card to the deck and draws a new one.`);
 
             } else {
                 // --- BLOCK CHALLENGE SUCCEEDED ---
-                // The blocker was bluffing. The blocker loses a card.
                 gameState.actionLog.push(`${blocker.name} was bluffing the block! The challenge succeeds.`);
                 gameState.phase = 'reveal_card';
                 gameState.playerToReveal = { id: blocker.id, reason: 'Caught Bluffing Block' };
 
-                 // --- NEW LOGIC STARTS HERE ---
-                // The original action now goes through successfully.
                 const originalAction = gameState.pendingAction.action;
                 const originalActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
-
+                
                 if (originalAction.toLowerCase() === 'steal') {
-                    // The 'blocker' is the original target who failed the block.
-                    const coinsToSteal = Math.min(blocker.coins, 2); 
+                    const coinsToSteal = Math.min(blocker.coins, 2);
                     originalActor.coins += coinsToSteal;
                     blocker.coins -= coinsToSteal;
                     gameState.actionLog.push(`${originalActor.name}'s steal succeeds, taking ${coinsToSteal} coins from ${blocker.name}.`);
@@ -183,19 +184,14 @@ io.on('connection', (socket) => {
             }
             gameState.actionLog.push(`${responder.name} does not challenge the block.`);
 
-            // Check if all possible challengers have passed.
             const numPossibleChallengers = gameState.players.filter(p => p.isAlive && p.id !== blockerId).length;
             if (gameState.passedPlayers.length === numPossibleChallengers) {
-                // --- BLOCK SUCCEEDS UNCHALLENGED ---
                 gameState.actionLog.push(`The block is not challenged and succeeds. The original action is cancelled.`);
-                
-                // Reset for the next turn
                 gameState.phase = 'action';
                 gameState = advanceTurn(gameState);
             }
         }
 
-        // If the phase changed, clean up and broadcast
         if (gameState.phase !== 'block_challenge') {
             gameState.pendingAction = null;
             gameState.pendingBlock = null;
@@ -248,8 +244,8 @@ io.on('connection', (socket) => {
                 const cardIndex = actor.cards.indexOf(requiredCard);
                 actor.cards.splice(cardIndex, 1);
                 gameState.deck.push(requiredCard);
-                shuffle(gameState.deck);
                 actor.cards.push(gameState.deck.pop());
+                gameState.actionLog.push(`${actor.name} shuffles their card back into the deck and draws a new one.`);
             } else {
                 // CHALLENGE SUCCEEDED
                 gameState.actionLog.push(`${actor.name} was bluffing! The challenge succeeds.`);
@@ -306,19 +302,33 @@ io.on('connection', (socket) => {
     });
 
     socket.on('returnExchangeCards', ({ roomId, keptCards }) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameState) return;
+
         let gameState = room.gameState;
         if (gameState.phase !== 'exchange_cards' || socket.id !== gameState.exchangeInfo.playerId) return;
 
         const player = gameState.players.find(p => p.id === socket.id);
         
-        // Determine which cards were returned
-        const allOptions = gameState.exchangeInfo.options;
-        const returnedCards = allOptions.filter(card => !keptCards.includes(card) || (keptCards.splice(keptCards.indexOf(card), 1) && false));
+        // --- THIS IS THE CORRECTED LOGIC ---
+        const allOptions = [...gameState.exchangeInfo.options]; // Create a mutable copy
+        const returnedCards = [];
 
-        // Update player's hand
+        // Figure out which cards to return without destroying the keptCards array
+        for (const card of keptCards) {
+            const index = allOptions.indexOf(card);
+            if (index > -1) {
+                allOptions.splice(index, 1);
+            }
+        }
+        // Whatever is left in allOptions are the cards to be returned to the deck.
+        returnedCards.push(...allOptions);
+        // --- END OF CORRECTED LOGIC ---
+
+        // Now, we can safely update the player's hand
         player.cards = keptCards;
         
-        // Return the other cards to the deck and shuffle
+        // Return the other cards to the bottom of the deck
         gameState.deck.unshift(...returnedCards);
         
         gameState.actionLog.push(`${player.name} completes their exchange.`);
