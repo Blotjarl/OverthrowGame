@@ -170,9 +170,25 @@
             box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
         }
 
-        /* Make cards overlap slightly */
         .card-image:not(:first-child) {
             margin-left: 5px;
+        }
+        .player-info-area {
+            display: flex; /* This will place cards and coins side-by-side */
+            align-items: center; /* This vertically aligns them */
+            gap: 20px; /* Adds some space between cards and coins */
+        }
+
+        .coins-area {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3 columns */
+            gap: 5px; /* Space between coins */
+            width: 80px; /* Fixed width for the coin grid */
+        }
+
+        .coin-image {
+            width: 20px; /* Adjust size as needed */
+            height: 20px;
         }
     </style>
 </head>
@@ -308,10 +324,19 @@
                 }
                 cardsHtml += '</div>';
 
+                let coinsHtml = '<div class="coins-area">';
+                const coinUrl = '/images/ducat.png'; // Make sure your image is named this
+                for (let i = 0; i < player.coins; i++) {
+                    coinsHtml += `<img src="${coinUrl}" class="coin-image" alt="Coin">`;
+                }
+                coinsHtml += '</div>';
+
                 playerBox.innerHTML = `
                     <h4>${player.name} ${player.id === socket.id ? '(You)' : ''}</h4>
-                    <p><strong>Coins:</strong> ${player.coins}</p>
-                    ${cardsHtml}
+                    <div class="player-info-area">
+                        ${cardsHtml}
+                        ${coinsHtml}
+                    </div>
                     ${revealedHtml}
                 `;
                 playerGrid.appendChild(playerBox);
