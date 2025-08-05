@@ -155,6 +155,25 @@
             color: #e0dcd1; /* Lighter parchment for log readability */
             font-family: Arial, sans-serif; /* Use a simpler font for the log */
         }
+        .cards-area {
+            display: flex;
+            margin-top: 10px;
+            flex-grow: 1; /* Allows this area to fill the space */
+            align-items: center; /* Center cards vertically */
+        }
+
+        .card-image {
+            height: 180px; /* Adjust size as needed */
+            width: auto;
+            border: 2px solid #1a1a1a;
+            border-radius: 5px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+        }
+
+        /* Make cards overlap slightly */
+        .card-image:not(:first-child) {
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -274,9 +293,20 @@
                     ? `<p>Revealed: <span class="revealed-cards">${player.revealedCards.join(', ')}</span></p>`
                     : '';
                 
-                let cardsHtml = player.id === socket.id
-                    ? `<p><strong>Cards:</strong> ${player.cards.join(', ')}</p>`
-                    : `<p><strong>Cards:</strong> ${player.cards.length}</p>`;
+                let cardsHtml = '<div class="cards-area">';
+                const cardBackUrl = '/images/overthrowBackofCard.png'; // URL for the card back image
+
+                // For opponents, show face-down card images
+                if (player.id !== socket.id) {
+                    for (let i = 0; i < player.cards.length; i++) {
+                        cardsHtml += `<img src="${cardBackUrl}" class="card-image" alt="Face-down card">`;
+                    }
+                } 
+                // For your own hand, still show the text names of your cards
+                else {
+                    cardsHtml += `<p><strong>Your Cards:</strong> ${player.cards.join(', ')}</p>`;
+                }
+                cardsHtml += '</div>';
 
                 playerBox.innerHTML = `
                     <h4>${player.name} ${player.id === socket.id ? '(You)' : ''}</h4>
