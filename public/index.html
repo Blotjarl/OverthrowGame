@@ -4,14 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Overthrow Game</title>
+    <!-- Import Medieval Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
-        /* Basic CSS Reset & Font */
+        /* --- NEW DARK FANTASY THEME --- */
+
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
+            font-family: 'Cinzel', serif; /* Medieval Font */
+            background-color: #2a2a2a; /* Dark Charcoal Background */
             margin: 0;
             padding: 20px;
-            color: #333;
+            color: #d2b48c; /* Parchment/Tan Text */
+        }
+        
+        h2, h3, h4 {
+            font-weight: 700;
+            color: #d2b48c;
+            text-shadow: 1px 1px 2px #000;
         }
 
         /* Lobby and Room Styling */
@@ -19,97 +31,106 @@
             max-width: 400px;
             margin: 40px auto;
             padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            background: #4a2c2a; /* Deep Burgundy/Brown */
+            border-radius: 4px;
+            border: 1px solid #1a1a1a;
+            box-shadow: 0 0 20px rgba(0,0,0,0.7);
         }
 
-        input[type="text"], button {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            box-sizing: border-box;
+        input[type="text"] {
+            background-color: #2a2a2a;
+            color: #d2b48c;
+            border: 1px solid #d2b48c;
+            font-family: 'Cinzel', serif;
+            font-size: 16px;
+        }
+        
+        input[type="text"]::placeholder {
+            color: #d2b48c;
+            opacity: 0.6;
         }
 
         button {
-            background-color: #007bff;
-            color: white;
-            border: none;
+            background-color: #d2b48c; /* Parchment/Tan */
+            color: #2a2a2a; /* Dark Charcoal Text */
+            border: 1px solid #1a1a1a;
+            border-radius: 2px;
             cursor: pointer;
             font-weight: bold;
+            font-family: 'Cinzel', serif;
+            font-size: 14px;
+            padding: 12px;
+            text-transform: uppercase;
+            transition: all 0.2s;
         }
         button:hover {
-            background-color: #0056b3;
+            background-color: #c8a86b; /* Muted Gold on hover */
+            box-shadow: 0 0 5px #d2b48c;
         }
 
-        /* --- NEW GAME UI STYLES --- */
-
-        /* Main Game Container - Flexbox Layout */
+        /* Main Game Container */
         #game-container {
             display: flex;
             gap: 20px;
-            max-width: 1200px;
+            max-width: 1600px;
             margin: auto;
         }
 
-        /* Game Board Area */
         #game-board {
-            flex-grow: 1; /* Takes up available space */
+            flex-grow: 1;
         }
 
-        /* Player Grid - CSS Grid Layout */
+        /* Player Grid - Solid Borders */
         #player-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr); /* 3 columns */
-            gap: 15px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0;
+            border-top: 2px solid #1a1a1a;
+            border-left: 2px solid #1a1a1a;
         }
 
         /* Individual Player Box */
         .player-box {
-            background: white;
-            border: 2px solid #ccc;
-            border-radius: 8px;
-            padding: 15px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            background: #4a2c2a; /* Deep Burgundy/Brown */
+            padding: 20px;
+            min-height: 220px;
+            border-right: 2px solid #1a1a1a;
+            border-bottom: 2px solid #1a1a1a;
             transition: all 0.2s ease-in-out;
         }
 
-        /* Highlight for the current player's turn */
         .player-box.is-turn {
-            border-color: #007bff;
-            box-shadow: 0 0 15px rgba(0, 123, 255, 0.5);
+            background-color: #6a3a3a; /* Lighter Red/Brown for turn */
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
         }
         
-        /* Highlight for the player's own box */
         .player-box.is-me {
-            background-color: #e7f3ff;
+            border: 2px solid #d2b48c; /* Parchment border for your box */
         }
         
         .player-box h4 {
             margin-top: 0;
+            border-bottom: 1px solid #d2b48c;
+            padding-bottom: 10px;
         }
 
-        /* Styling for revealed cards */
         .revealed-cards {
-            color: #dc3545;
+            color: #ff7b7b; /* A brighter, more ominous red */
             font-weight: bold;
         }
         
-        /* Player is eliminated */
         .player-box.is-eliminated {
+            background-color: #2a2a2a;
             opacity: 0.5;
-            background-color: #f8f9fa;
         }
 
         /* Action Menu Area */
         #action-menu {
-            background: #fff;
+            background: #4a2c2a;
             padding: 15px;
-            border-radius: 8px;
-            min-height: 100px;
+            border: 2px solid #1a1a1a;
+            min-height: 120px;
+            margin-top: 20px;
         }
         #action-menu button {
             width: auto;
@@ -119,28 +140,27 @@
 
         /* Sidebar for Action Log */
         #sidebar {
-            width: 300px;
-            flex-shrink: 0; /* Prevents sidebar from shrinking */
-            background: white;
+            width: 350px;
+            flex-shrink: 0;
+            background: #4a2c2a;
             padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border: 2px solid #1a1a1a;
         }
 
         #action-log {
-            height: 400px;
-            overflow-y: auto; /* Makes the log scrollable */
-            border-top: 1px solid #eee;
+            height: 500px;
+            overflow-y: auto;
+            border-top: 1px solid #d2b48c;
             padding-top: 10px;
+            color: #e0dcd1; /* Lighter parchment for log readability */
+            font-family: Arial, sans-serif; /* Use a simpler font for the log */
         }
-
     </style>
 </head>
 <body>
 
     <h2 style="text-align: center;">Overthrow</h2>
 
-    <!-- Lobby and Room divs remain for pre-game -->
     <div id="lobby">
         <h3>Join or Create a Room</h3>
         <input id="nameInput" type="text" placeholder="Enter your name">
@@ -156,25 +176,16 @@
         <button onclick="leaveRoom()">Leave Room</button>
     </div>
 
-    <!-- NEW Game Container Layout -->
     <div id="game-container" style="display: none;">
         
-        <!-- Main Board Section -->
         <div id="game-board">
-            <div id="player-grid">
-                <!-- Player boxes will be generated here by JavaScript -->
-            </div>
-            <div id="action-menu">
-                <!-- Action buttons will be generated here -->
-            </div>
+            <div id="player-grid"></div>
+            <div id="action-menu"></div>
         </div>
 
-        <!-- Sidebar Section -->
         <div id="sidebar">
             <h4>Action Log</h4>
-            <div id="action-log">
-                <!-- Log messages will be generated here -->
-            </div>
+            <div id="action-log"></div>
         </div>
     </div>
 
@@ -182,7 +193,7 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // --- All your existing socket logic and functions (createRoom, joinRoom, etc.) remain the same ---
+        // --- All your existing JavaScript logic remains exactly the same ---
         const socket = io();
         let currentRoom = null;
         let gameState = null;
@@ -200,11 +211,10 @@
             gameState = initialGameState;
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('room').style.display = 'none';
-            document.getElementById('game-container').style.display = 'flex'; // Use flex to show it
+            document.getElementById('game-container').style.display = 'flex';
             renderGameState();
         });
 
-        // --- All your action functions (revealCard, respondToAction, etc.) remain the same ---
         function revealCard(cardName) {
             socket.emit('revealCard', { roomId: currentRoom, cardName: cardName });
         }
@@ -240,7 +250,6 @@
             }
         }
 
-        // --- COMPLETELY NEW renderGameState FUNCTION ---
         function renderGameState() {
             if (!gameState) return;
 
@@ -248,12 +257,11 @@
             const actionMenu = document.getElementById('action-menu');
             const actionLog = document.getElementById('action-log');
 
-            playerGrid.innerHTML = ''; // Clear the grid
+            playerGrid.innerHTML = '';
 
             const me = gameState.players.find(p => p.id === socket.id);
             const mercyRuleActive = gameState.players.some(p => p.id !== socket.id && p.isAlive && p.cards.length === 2);
 
-            // --- Render each player in the grid ---
             gameState.players.forEach((player, index) => {
                 const playerBox = document.createElement('div');
                 playerBox.className = 'player-box';
@@ -266,7 +274,6 @@
                     ? `<p>Revealed: <span class="revealed-cards">${player.revealedCards.join(', ')}</span></p>`
                     : '';
                 
-                // For your own player, show your cards. For others, show card count.
                 let cardsHtml = player.id === socket.id
                     ? `<p><strong>Cards:</strong> ${player.cards.join(', ')}</p>`
                     : `<p><strong>Cards:</strong> ${player.cards.length}</p>`;
@@ -280,12 +287,10 @@
                 playerGrid.appendChild(playerBox);
             });
 
-            // --- Render the Action Menu (your existing logic is moved here) ---
-            actionMenu.innerHTML = ''; // Clear the menu
+            actionMenu.innerHTML = '';
             const myTurn = gameState.players[gameState.currentPlayerIndex].id === socket.id;
 
             switch (gameState.phase) {
-                // All your existing case logic for the action menu goes here...
                 case 'action':
                     if (myTurn) {
                         if (me.coins >= 10) {
@@ -380,12 +385,10 @@
                      break;
             }
 
-            // --- Render the Action Log ---
             actionLog.innerHTML = gameState.actionLog.join('<br>');
-            actionLog.scrollTop = actionLog.scrollHeight; // Auto-scroll to the bottom
+            actionLog.scrollTop = actionLog.scrollHeight;
         }
 
-        // --- Your existing pre-game functions (createRoom, joinRoom, etc.) ---
         function createRoom() {
             const username = document.getElementById('nameInput').value.trim();
             if (username) {
