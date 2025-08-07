@@ -14,7 +14,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const CARDS = ['Duke', 'Assassin', 'Captain', 'Ambassador', 'Contessa'];
+const CARDS = ['Tax Collector', 'Warrior', 'Thief', 'Courtier', 'Defender'];
 const DECK = [];
 CARDS.forEach(card => {
   // Add 3 of each card to the deck
@@ -91,21 +91,21 @@ io.on('connection', (socket) => {
             const target = gameState.players.find(p => p.id === pendingAction.targetId);
 
             switch (pendingAction.action.toLowerCase()) {
-                case 'steal':
+                case 'thieve':
                     const coinsToSteal = Math.min(target.coins, 2);
                     actor.coins += coinsToSteal;
                     target.coins -= coinsToSteal;
-                    gameState.actionLog.push(`${actor.name} steals ${coinsToSteal} coins from ${target.name}.`);
+                    gameState.actionLog.push(`${actor.name} thieves ${coinsToSteal} coins from ${target.name}.`);
                     break;
-                case 'assassinate':
+                case 'attack':
                     actor.coins -= 3;
                     gameState.phase = 'reveal_card';
-                    gameState.playerToReveal = { id: target.id, reason: 'Assassinated' };
+                    gameState.playerToReveal = { id: target.id, reason: 'Attacked' };
                     turnShouldAdvance = false; // Wait for the second reveal
                     break;
-                case 'tax':
+                case 'levy':
                     actor.coins += 3;
-                    gameState.actionLog.push(`${actor.name} gains 3 coins from Tax.`);
+                    gameState.actionLog.push(`${actor.name} gains 3 coins from Levy.`);
                     break;
             }
         }
@@ -170,11 +170,11 @@ io.on('connection', (socket) => {
                 const originalAction = gameState.pendingAction.action;
                 const originalActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
                 
-                if (originalAction.toLowerCase() === 'steal') {
+                if (originalAction.toLowerCase() === 'thieve') {
                     const coinsToSteal = Math.min(blocker.coins, 2);
                     originalActor.coins += coinsToSteal;
                     blocker.coins -= coinsToSteal;
-                    gameState.actionLog.push(`${originalActor.name}'s steal succeeds, taking ${coinsToSteal} coins from ${blocker.name}.`);
+                    gameState.actionLog.push(`${originalActor.name}'s thieve succeeds, taking ${coinsToSteal} coins from ${blocker.name}.`);
                 }
             }
 
@@ -226,10 +226,10 @@ io.on('connection', (socket) => {
             const challenger = gameState.players.find(p => p.id === responderId);
             const actor = gameState.players.find(p => p.id === actorId);
             const requiredCard = {
-                'tax': 'Duke',
-                'assassinate': 'Assassin',
-                'steal': 'Captain',
-                'exchange': 'Ambassador'
+                'levy': 'Tax Collector',
+                'attack': 'Warrior',
+                'thieve': 'Thief',
+                'exchange': 'Courtier'
             }[action.toLowerCase()];
 
             gameState.actionLog.push(`${challenger.name} challenges ${actor.name}'s claim to be a ${requiredCard}!`);
@@ -267,17 +267,17 @@ io.on('connection', (socket) => {
             if (gameState.passedPlayers.length === numPossibleChallengers) {
                 gameState.actionLog.push(`The action is not challenged.`);
                 
-                const blockableActions = ['assassinate', 'steal', 'foreign_aid'];
+                const blockableActions = ['attack', 'thieve', 'smuggle_goods'];
 
                 // If the action is blockable, move to a new phase for the target to respond.
                 if (blockableActions.includes(action.toLowerCase())) {
                     gameState.phase = 'declare_block'; // The correct new phase
                 } else {
-                    // If the action was NOT blockable (like Tax), it succeeds immediately.
+                    // If the action was NOT blockable (like Levy), it succeeds immediately.
                     const actor = gameState.players.find(p => p.id === actorId);
-                    if (action.toLowerCase() === 'tax') {
+                    if (action.toLowerCase() === 'levy') {
                         actor.coins += 3;
-                        gameState.actionLog.push(`${actor.name} gains 3 coins from Tax.`);
+                        gameState.actionLog.push(`${actor.name} gains 3 coins from Levy.`);
                     }
                     if (action.toLowerCase() === 'exchange') {
                         gameState.phase = 'exchange_cards';
@@ -364,22 +364,23 @@ io.on('connection', (socket) => {
             // Resolve the original action (e.g., the steal)
             const actor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
             
-            if (originalAction.toLowerCase() === 'steal') {
+            if (originalAction.toLowerCase() === 'thieve') {
                 const coinsToSteal = Math.min(blocker.coins, 2);
                 actor.coins += coinsToSteal;
                 blocker.coins -= coinsToSteal;
-                gameState.actionLog.push(`${actor.name} steals ${coinsToSteal} coins from ${blocker.name}.`);
+                gameState.actionLog.push(`${actor.name} thieves ${coinsToSteal} coins from ${blocker.name}.`);
+
 
                 // Reset for the next turn
                 gameState.phase = 'action';
                 gameState.pendingAction = null;
                 gameState = advanceTurn(gameState);
 
-            } else if (originalAction.toLowerCase() === 'assassinate') {
-                // The assassination succeeds, target must reveal a card.
+            } else if (originalAction.toLowerCase() === 'attack') {
+                // The attack succeeds, target must reveal a card.
                 actor.coins -= 3; // Pay the cost
                 gameState.phase = 'reveal_card';
-                gameState.playerToReveal = { id: targetId, reason: 'Assassinated' };
+                gameState.playerToReveal = { id: targetId, reason: 'Attacked' };
                 gameState.pendingAction = null; // Clear the pending action
             }
 
@@ -399,6 +400,8 @@ io.on('connection', (socket) => {
 });
 
     // --- Handle Player Actions ---
+    // In server.js, replace your entire performAction listener with this one.
+
     socket.on('performAction', ({ roomId, action, targetId }) => {
         const room = rooms[roomId];
         if (!room || !room.gameState) return;
@@ -406,68 +409,60 @@ io.on('connection', (socket) => {
         let gameState = room.gameState;
         const playerIndex = gameState.players.findIndex(p => p.id === socket.id);
         
-        if (playerIndex !== gameState.currentPlayerIndex) return; // Not their turn
-        if (gameState.phase !== 'action') return; // Not the action phase
+        if (playerIndex !== gameState.currentPlayerIndex || gameState.phase !== 'action') return;
 
         const player = gameState.players[playerIndex];
         
         if (action.toLowerCase() === 'overthrow') {
-                if (player.coins < 7) {
-                    console.log("Not enough coins for Overthrow");
-                    return; 
-                }
+            if (player.coins < 7) return; 
+            player.coins -= 7;
+            const target = gameState.players.find(p => p.id === targetId);
+            gameState.actionLog.push(`${player.name} pays 7 coins to Overthrow ${target.name}! This cannot be blocked.`);
+            gameState.phase = 'reveal_card';
+            gameState.playerToReveal = { id: targetId, reason: 'Overthrown' };
+            io.to(roomId).emit('gameUpdate', gameState);
+            return;
+        }
 
-                player.coins -= 7;
-                const target = gameState.players.find(p => p.id === targetId);
-                gameState.actionLog.push(`${player.name} pays 7 coins to Overthrow ${target.name}! This cannot be blocked.`);
-
-                // Go directly to the reveal phase for the target
-                gameState.phase = 'reveal_card';
-                gameState.playerToReveal = { id: targetId, reason: 'Overthrown' };
-                
-                io.to(roomId).emit('gameUpdate', gameState);
-                return; // The action is handled, so we stop the function here.
-            }
-
-        // --- Handle simple actions that don't have challenges ---
-        if (action === 'income') {
+        // --- THIS IS THE CORRECTED BLOCK ---
+        if (action === 'harvest_crop') { // Corrected from 'income'
             player.coins += 1;
-            gameState.actionLog.push(`${player.name} takes Income.`);
-            // Advance turn
+            gameState.actionLog.push(`${player.name} Harvests Crop.`);
             gameState = advanceTurn(gameState);
             io.to(roomId).emit('gameUpdate', gameState);
-            return; // End the function here
+            return; 
         }
+        // --- END OF CORRECTION ---
 
-        // --- Handle actions that can be challenged ---
-        // Determine the card and log message for the action
+        let requiredCard = null;
+        let logMessage = '';
+        
         switch (action) {
-            case 'tax':
-            requiredCard = 'Duke';
-            logMessage = `${player.name} claims to have a Duke to perform TAX.`;
-            break;
-            case 'foreign_aid': // <-- ADD THIS NEW CASE
-            logMessage = `${player.name} is attempting to take Foreign Aid.`;
-            requiredCard = null; // Foreign aid itself cannot be challenged, only blocked.
-            break;
-            case 'assassinate':
-            if (player.coins < 3) return; // Not enough coins
-            requiredCard = 'Assassin';
-            const target = gameState.players.find(p => p.id === targetId);
-            logMessage = `${player.name} claims to have an Assassin and pays 3 coins to Assassinate ${target.name}.`;
-            break;
-            case 'steal':
-            requiredCard = 'Captain';
-            const stealTarget = gameState.players.find(p => p.id === targetId);
-            logMessage = `${player.name} claims to have a Captain to STEAL from ${stealTarget.name}.`;
-            break;
+            case 'levy':
+                requiredCard = 'Tax Collector';
+                logMessage = `${player.name} claims to be a Tax Collector to perform LEVY.`;
+                break;
+            case 'smuggle_goods':
+                logMessage = `${player.name} is attempting to Smuggle Goods.`;
+                requiredCard = null;
+                break;
+            case 'attack':
+                if (player.coins < 3) return;
+                requiredCard = 'Warrior';
+                const target = gameState.players.find(p => p.id === targetId);
+                logMessage = `${player.name} claims to be a Warrior and pays 3 coins to ATTACK ${target.name}.`;
+                break;
+            case 'thieve':
+                requiredCard = 'Thief';
+                const stealTarget = gameState.players.find(p => p.id === targetId);
+                logMessage = `${player.name} claims to be a Thief to THIEVE from ${stealTarget.name}.`;
+                break;
             case 'exchange':
-            requiredCard = 'Ambassador';
-            logMessage = `${player.name} claims to have an Ambassador to perform an EXCHANGE.`;
-            break;
+                requiredCard = 'Courtier';
+                logMessage = `${player.name} claims to be a Courtier to perform an EXCHANGE.`;
+                break;
         }
 
-        // If it's a challengeable action, set the game phase
         if (requiredCard) {
             gameState.phase = 'challenge';
             gameState.pendingAction = {
@@ -480,20 +475,19 @@ io.on('connection', (socket) => {
             gameState.actionLog.push(logMessage);
             io.to(roomId).emit('gameUpdate', gameState);
         } 
-        else if (action === 'foreign_aid') { 
-            gameState.phase = 'block_declaration_period'; // The new phase for blocking
+        else if (action === 'smuggle_goods') { 
+            gameState.phase = 'block_declaration_period';
             gameState.pendingAction = {
-                action: 'Foreign Aid',
+                action: 'Smuggle Goods',
                 actorId: player.id,
                 actorName: player.name
             };
             gameState.actionLog.push(logMessage);
             io.to(roomId).emit('gameUpdate', gameState);
         }
-
     });
 
-    socket.on('foreignAidResponse', ({ roomId, response }) => {
+    socket.on('smuggleGoodsResponse', ({ roomId, response }) => {
         const room = rooms[roomId];
         if (!room || !room.gameState || room.gameState.phase !== 'block_declaration_period') return;
 
@@ -506,14 +500,14 @@ io.on('connection', (socket) => {
         if (!responder || !responder.isAlive || responder.id === actorId) return;
 
         if (response === 'block') {
-            // --- A player is claiming to have a Duke to block ---
-            gameState.actionLog.push(`${responder.name} claims to have a Duke to BLOCK the Foreign Aid!`);
-            
+            // --- A player is claiming to have a Tax Collector to block ---
+            gameState.actionLog.push(`${responder.name} claims to have a Tax Collector to BLOCK the Smuggle Goods!`);
+
             // Move to a new phase where this block can be challenged
             gameState.phase = 'block_challenge';
             gameState.pendingBlock = {
                 blockerId: responder.id,
-                blockingCard: 'Duke'
+                blockingCard: 'Tax Collector'
             };
             // Clear passers for the new challenge round
             gameState.passedPlayers = [];
@@ -529,10 +523,10 @@ io.on('connection', (socket) => {
             const numPossibleBlockers = gameState.players.filter(p => p.isAlive && p.id !== actorId).length;
 
             if (gameState.passedPlayers.length === numPossibleBlockers) {
-                // --- FOREIGN AID SUCCEEDS UNCHALLENGED ---
+                // --- SMUGGLING SUCCEEDS UNCHALLENGED ---
                 const actor = gameState.players.find(p => p.id === actorId);
                 actor.coins += 2;
-                gameState.actionLog.push(`${actor.name}'s Foreign Aid succeeds. They gain 2 coins.`);
+                gameState.actionLog.push(`${actor.name}'s Smuggling succeeds. They gain 2 coins.`);
                 
                 // Reset for the next turn
                 gameState.phase = 'action';

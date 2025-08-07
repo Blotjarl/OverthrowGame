@@ -263,8 +263,9 @@
         function declareBlock(blockType) {
             socket.emit('declareBlock', { roomId: currentRoom, blockType: blockType });
         }
-        function respondToForeignAid(response) {
-            socket.emit('foreignAidResponse', { roomId: currentRoom, response: response });
+        function respondToSmuggleGoods(response) {
+          console.log(`Responding to Smuggle Goods with: ${response}`);
+          socket.emit('smuggleGoodsResponse', { roomId: currentRoom, response: response });
         }
         function respondToBlock(response) {
             socket.emit('blockResponse', { roomId: currentRoom, response: response });
@@ -325,7 +326,7 @@
                 cardsHtml += '</div>';
 
                 let coinsHtml = '<div class="coins-area">';
-                const coinUrl = '/images/ducat2.png'; // Make sure your image is named this
+                const coinUrl = '/images/ducat3.jpg'; // Make sure your image is named this
                 for (let i = 0; i < player.coins; i++) {
                     coinsHtml += `<img src="${coinUrl}" class="coin-image" alt="Coin">`;
                 }
@@ -359,7 +360,7 @@
                         } else if (selectingTargetFor) {
                             actionMenu.innerHTML = `<h4>Who do you want to ${selectingTargetFor}?</h4>`;
                             gameState.players.forEach(target => {
-                                if ((selectingTargetFor === 'overthrow' || selectingTargetFor === 'assassinate') && mercyRuleActive && target.cards.length === 1) return;
+                                if ((selectingTargetFor === 'overthrow' || selectingTargetFor === 'attack') && mercyRuleActive && target.cards.length === 1) return;
                                 if (target.id !== socket.id && target.isAlive) {
                                     actionMenu.innerHTML += `<button onclick="performAction('${selectingTargetFor}', '${target.id}')">${target.name}</button>`;
                                 }
@@ -367,12 +368,12 @@
                             actionMenu.innerHTML += `<button onclick="cancelTargetSelection()">Cancel</button>`;
                         } else {
                             let actionsHtml = `<h4>Your Actions</h4>`;
-                            actionsHtml += `<button onclick="performAction('income')">Income</button>`;
-                            actionsHtml += `<button onclick="performAction('foreign_aid')">Foreign Aid</button>`;
-                            actionsHtml += `<button onclick="performAction('tax')">Tax (Duke)</button>`;
-                            actionsHtml += `<button onclick="performAction('exchange')">Exchange (Ambassador)</button>`;
-                            actionsHtml += `<button onclick="initiateTargetedAction('steal')">Steal (Captain)</button>`;
-                            if (me.coins >= 3) actionsHtml += `<button onclick="initiateTargetedAction('assassinate')">Assassinate (Assassin)</button>`;
+                            actionsHtml += `<button onclick="performAction('harvest_crop')">Harvest Crop</button>`;
+                            actionsHtml += `<button onclick="performAction('smuggle_goods')">Smuggle Goods</button>`;
+                            actionsHtml += `<button onclick="performAction('levy')">Levy (Tax Collector)</button>`;
+                            actionsHtml += `<button onclick="performAction('exchange')">Exchange (Courtier)</button>`;
+                            actionsHtml += `<button onclick="initiateTargetedAction('thieve')">Thieve (Thief)</button>`;
+                            if (me.coins >= 3) actionsHtml += `<button onclick="initiateTargetedAction('attack')">Attack (Warrior)</button>`;
                             if (me.coins >= 7) actionsHtml += `<button onclick="initiateTargetedAction('overthrow')">Overthrow</button>`;
                             actionMenu.innerHTML = actionsHtml;
                         }
@@ -391,20 +392,20 @@
                      actionMenu.innerHTML = `<h4>Waiting for ${target.name} to respond...</h4>`;
                      if (actionInfo.targetId === socket.id) {
                          let blockButtons = `<h4>Do you want to block the ${actionInfo.action}?</h4>`;
-                         if (actionInfo.action.toLowerCase() === 'steal') {
-                             blockButtons += `<button onclick="declareBlock('Captain')">Block with Captain</button> <button onclick="declareBlock('Ambassador')">Block with Ambassador</button>`;
-                         } else if (actionInfo.action.toLowerCase() === 'assassinate') {
-                             blockButtons += `<button onclick="declareBlock('Contessa')">Block with Contessa</button>`;
+                         if (actionInfo.action.toLowerCase() === 'thieve') {
+                            blockButtons += `<button onclick="declareBlock('Thief')">Thwart with Thief</button> <button onclick="declareBlock('Courtier')">Thwart with Courtier</button>`;
+                         } else if (actionInfo.action.toLowerCase() === 'attack') {
+                             blockButtons += `<button onclick="declareBlock('Defender')">Block with Defender</button>`;
                          }
                          blockButtons += `<button onclick="declareBlock('No Block')">Do Not Block</button>`;
                          actionMenu.innerHTML = blockButtons;
                      }
                      break;
                  case 'block_declaration_period':
-                     const foreignAidActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
-                     actionMenu.innerHTML = `<h4>${foreignAidActor.name} is taking Foreign Aid!</h4>`;
-                     if (foreignAidActor.id !== socket.id && me.isAlive) {
-                         actionMenu.innerHTML += `<button onclick="respondToForeignAid('block')">Block with Duke</button> <button onclick="respondToForeignAid('pass')">Pass</button>`;
+                     const smuggleGoodsActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
+                     actionMenu.innerHTML = `<h4>${smuggleGoodsActor.name} is attempting to Smuggle Goods!</h4>`;
+                     if (smuggleGoodsActor.id !== socket.id && me.isAlive) {
+                         actionMenu.innerHTML += `<button onclick="respondToSmuggleGoods('block')">Block with Tax Collector</button> <button onclick="respondToSmuggleGoods('pass')">Pass</button>`;
                      }
                      break;
                  case 'block_challenge':
