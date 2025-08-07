@@ -7,12 +7,8 @@ const server = http.createServer(app);
 const io = new Server(server);
 const { v4: uuidv4 } = require('uuid');
 
-const path = require('path');
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// Serve all static files (index.html, images, etc.) from the 'public' directory
+app.use(express.static('public'));
 
 const CARDS = ['Tax Collector', 'Warrior', 'Thief', 'Courtier', 'Defender'];
 const DECK = [];
@@ -673,5 +669,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
