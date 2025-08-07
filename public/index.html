@@ -254,7 +254,9 @@
             socket.emit('revealCard', { roomId: currentRoom, cardName: cardName });
         }
         function respondToAction(response) {
+            console.log(`Responding to action with: ${response}`);
             socket.emit('challengeResponse', { roomId: currentRoom, response: response });
+            document.getElementById('action-menu').innerHTML = `<h4>Waiting for other players...</h4>`;
         }
         function cancelTargetSelection() {
             selectingTargetFor = null;
@@ -313,7 +315,7 @@
              
                 const cardImageMap = {
                     'Warrior': '/images/warrior.png',
-                    'Thief': '/images/thief2.png',
+                    'Thief': '/images/thief.png',
                     'Tax Collector': '/images/taxCollector.png',
                     'Defender': '/images/defender.png',
                     'Courtier': '/images/courtier.png'
