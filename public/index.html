@@ -258,6 +258,15 @@
             width: auto; /* Prevents the button from stretching full-width */
             margin-bottom: 0;
         }
+        .lobby-actions {
+            display: flex; /* Aligns items in a row */
+            gap: 10px; /* Adds a small space between the buttons */
+            margin-top: 10px; /* Adds some space above the buttons */
+        }
+
+        .lobby-actions button {
+            margin-bottom: 0; /* Removes the bottom margin from individual buttons */
+        }
     </style>
 </head>
 <body>
@@ -271,8 +280,11 @@
         </div>
         <input id="nameInput" type="text" placeholder="Enter your name">
         <input id="roomInput" type="text" placeholder="Enter room code">
-        <button onclick="joinRoom()">Join Room</button>
-        <button onclick="createRoom()">Create Room</button>
+
+        <div class="lobby-actions">
+            <button onclick="joinRoom()">Join Room</button>
+            <button onclick="createRoom()">Create Room</button>
+        </div>
     </div>
 
     <div id="room" style="display: none;">
