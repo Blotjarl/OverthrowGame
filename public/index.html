@@ -310,23 +310,42 @@
                     ? `<p>Revealed: <span class="revealed-cards">${player.revealedCards.join(', ')}</span></p>`
                     : '';
                 
-                let cardsHtml = '<div class="cards-area">';
-                const cardBackUrl = '/images/overthrowBackofCard.png'; // URL for the card back image
+             
+                const cardImageMap = {
+                    'Warrior': '/images/warrior.png',
+                    'Thief': '/images/thief2.png',
+                    'Tax Collector': '/images/taxCollector.png',
+                    'Defender': '/images/defender.png',
+                    'Courtier': '/images/courtier.png'
+                };
+                const cardBackUrl = '/images/overthrowBackofCard.png';
 
-                // For opponents, show face-down card images
-                if (player.id !== socket.id) {
+                let cardsHtml = '<div class="cards-area">';
+
+                // For your own hand, show your face-up cards
+                if (player.id === socket.id) {
+                    player.cards.forEach(cardName => {
+                        const imageUrl = cardImageMap[cardName] || cardBackUrl; 
+                        cardsHtml += `<img src="${imageUrl}" class="card-image" alt="${cardName}">`;
+                    });
+                } 
+                // For opponents, show hidden cards first (left), then revealed cards (right)
+                else {
+                    // First, show their remaining hidden cards face-down
                     for (let i = 0; i < player.cards.length; i++) {
                         cardsHtml += `<img src="${cardBackUrl}" class="card-image" alt="Face-down card">`;
                     }
-                } 
-                // For your own hand, still show the text names of your cards
-                else {
-                    cardsHtml += `<p><strong>Your Cards:</strong> ${player.cards.join(', ')}</p>`;
+                    // Then, show their revealed cards face-up
+                    player.revealedCards.forEach(cardName => {
+                        const imageUrl = cardImageMap[cardName] || cardBackUrl;
+                        cardsHtml += `<img src="${imageUrl}" class="card-image" alt="${cardName}">`;
+                    });
                 }
                 cardsHtml += '</div>';
 
+                // We no longer need the separate "Revealed" text line.
                 let coinsHtml = '<div class="coins-area">';
-                const coinUrl = '/images/ducat3.jpg'; // Make sure your image is named this
+                const coinUrl = '/images/ducat3.jpg';
                 for (let i = 0; i < player.coins; i++) {
                     coinsHtml += `<img src="${coinUrl}" class="coin-image" alt="Coin">`;
                 }
@@ -338,7 +357,6 @@
                         ${cardsHtml}
                         ${coinsHtml}
                     </div>
-                    ${revealedHtml}
                 `;
                 playerGrid.appendChild(playerBox);
             });
