@@ -348,8 +348,8 @@
                 // We no longer need the separate "Revealed" text line.
                 let coinsHtml = '<div class="coins-area">';
                 const coinUrl = '/images/ducat3.jpg';
-                for (let i = 0; i < player.coins; i++) {
-                    coinsHtml += `<img src="${coinUrl}" class="coin-image" alt="Coin">`;
+                for (let i = 0; i < player.ducats; i++) { // <-- Change here
+                    coinsHtml += `<img src="${coinUrl}" class="coin-image" alt="Ducat">`; // <-- Change here
                 }
                 coinsHtml += '</div>';
 
@@ -369,8 +369,8 @@
             switch (gameState.phase) {
                 case 'action':
                     if (myTurn) {
-                        if (me.coins >= 10) {
-                            actionMenu.innerHTML = `<h4>You have ${me.coins} coins and must Overthrow!</h4>`;
+                        if (me.ducats >= 10) {
+                            actionMenu.innerHTML = `<h4>You have ${me.ducats} ducats and must Overthrow!</h4>`;
                             gameState.players.forEach(target => {
                                 if (mercyRuleActive && target.cards.length === 1) return;
                                 if (target.id !== socket.id && target.isAlive) {
@@ -393,8 +393,8 @@
                             actionsHtml += `<button onclick="performAction('levy')">Levy (Tax Collector)</button>`;
                             actionsHtml += `<button onclick="performAction('exchange')">Exchange (Courtier)</button>`;
                             actionsHtml += `<button onclick="initiateTargetedAction('thieve')">Thieve (Thief)</button>`;
-                            if (me.coins >= 3) actionsHtml += `<button onclick="initiateTargetedAction('attack')">Attack (Warrior)</button>`;
-                            if (me.coins >= 7) actionsHtml += `<button onclick="initiateTargetedAction('overthrow')">Overthrow</button>`;
+                            if (me.ducats >= 3) actionsHtml += `<button onclick="initiateTargetedAction('attack')">Attack (Warrior)</button>`;
+                            if (me.ducats >= 7) actionsHtml += `<button onclick="initiateTargetedAction('overthrow')">Overthrow</button>`;
                             actionMenu.innerHTML = actionsHtml;
                         }
                     }

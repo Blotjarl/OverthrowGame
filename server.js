@@ -100,20 +100,20 @@ io.on('connection', (socket) => {
 
             switch (pendingAction.action.toLowerCase()) {
                 case 'thieve':
-                    const coinsToSteal = Math.min(target.coins, 2);
-                    actor.coins += coinsToSteal;
-                    target.coins -= coinsToSteal;
-                    gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} thieves ${coinsToSteal} coins from ${target.name}.`);
+                    const ducatsToSteal = Math.min(target.ducats, 2);
+                    actor.ducats += ducatsToSteal;
+                    target.ducats -= ducatsToSteal;
+                    gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} thieves ${ducatsToSteal} ducats from ${target.name}.`);
                     break;
                 case 'attack':
-                    actor.coins -= 3;
+                    actor.ducats -= 3;
                     gameState.phase = 'reveal_card';
                     gameState.playerToReveal = { id: target.id, reason: 'Attacked' };
                     turnShouldAdvance = false; // Wait for the second reveal
                     break;
                 case 'levy':
-                    actor.coins += 3;
-                    gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} gains 3 coins from Levy.`);
+                    actor.ducats += 3;
+                    gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} gains 3 ducats from Levy.`);
                     break;
             }
         }
@@ -179,10 +179,10 @@ io.on('connection', (socket) => {
                 const originalActor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
                 
                 if (originalAction.toLowerCase() === 'thieve') {
-                    const coinsToSteal = Math.min(blocker.coins, 2);
-                    originalActor.coins += coinsToSteal;
-                    blocker.coins -= coinsToSteal;
-                    gameState.actionLog.unshift(`${getTimeStamp()} ${originalActor.name}'s thieve succeeds, taking ${coinsToSteal} coins from ${blocker.name}.`);
+                    const ducatsToSteal = Math.min(blocker.ducats, 2);
+                    originalActor.ducats += ducatsToSteal;
+                    blocker.ducats -= ducatsToSteal;
+                    gameState.actionLog.unshift(`${getTimeStamp()} ${originalActor.name}'s thieve succeeds, taking ${ducatsToSteal} ducats from ${blocker.name}.`);
                 }
             }
 
@@ -284,8 +284,8 @@ io.on('connection', (socket) => {
                     // If the action was NOT blockable (like Levy), it succeeds immediately.
                     const actor = gameState.players.find(p => p.id === actorId);
                     if (action.toLowerCase() === 'levy') {
-                        actor.coins += 3;
-                        gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} gains 3 coins from Levy.`);
+                        actor.ducats += 3;
+                        gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} gains 3 ducats from Levy.`);
                     }
                     if (action.toLowerCase() === 'exchange') {
                         gameState.phase = 'exchange_cards';
@@ -373,10 +373,10 @@ io.on('connection', (socket) => {
             const actor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
             
             if (originalAction.toLowerCase() === 'thieve') {
-                const coinsToSteal = Math.min(blocker.coins, 2);
-                actor.coins += coinsToSteal;
-                blocker.coins -= coinsToSteal;
-                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} thieves ${coinsToSteal} coins from ${blocker.name}.`);
+                const ducatsToSteal = Math.min(blocker.ducats, 2);
+                actor.ducats += ducatsToSteal;
+                blocker.ducats -= ducatsToSteal;
+                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} thieves ${ducatsToSteal} ducats from ${blocker.name}.`);
 
 
                 // Reset for the next turn
@@ -386,7 +386,7 @@ io.on('connection', (socket) => {
 
             } else if (originalAction.toLowerCase() === 'attack') {
                 // The attack succeeds, target must reveal a card.
-                actor.coins -= 3; // Pay the cost
+                actor.ducats -= 3; // Pay the cost
                 gameState.phase = 'reveal_card';
                 gameState.playerToReveal = { id: targetId, reason: 'Attacked' };
                 gameState.pendingAction = null; // Clear the pending action
@@ -422,10 +422,10 @@ io.on('connection', (socket) => {
         const player = gameState.players[playerIndex];
         
         if (action.toLowerCase() === 'overthrow') {
-            if (player.coins < 7) return; 
-            player.coins -= 7;
+            if (player.ducats < 7) return;
+            player.ducats -= 7;
             const target = gameState.players.find(p => p.id === targetId);
-            gameState.actionLog.unshift(`${getTimeStamp()} ${player.name} pays 7 coins to Overthrow ${target.name}! This cannot be blocked.`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${player.name} pays 7 ducats to Overthrow ${target.name}! This cannot be blocked.`);
             gameState.phase = 'reveal_card';
             gameState.playerToReveal = { id: targetId, reason: 'Overthrown' };
             io.to(roomId).emit('gameUpdate', gameState);
@@ -434,7 +434,7 @@ io.on('connection', (socket) => {
 
         // --- THIS IS THE CORRECTED BLOCK ---
         if (action === 'harvest_crop') { // Corrected from 'income'
-            player.coins += 1;
+            player.ducats += 1;
             gameState.actionLog.unshift(`${getTimeStamp()} ${player.name} Harvests Crop.`);
             gameState = advanceTurn(gameState);
             io.to(roomId).emit('gameUpdate', gameState);
@@ -455,10 +455,10 @@ io.on('connection', (socket) => {
                 requiredCard = null;
                 break;
             case 'attack':
-                if (player.coins < 3) return;
+                if (player.ducats < 3) return;
                 requiredCard = 'Warrior';
                 const target = gameState.players.find(p => p.id === targetId);
-                logMessage = `${player.name} claims to be a Warrior and pays 3 coins to ATTACK ${target.name}.`;
+                logMessage = `${player.name} claims to be a Warrior and pays 3 ducats to ATTACK ${target.name}.`;
                 break;
             case 'thieve':
                 requiredCard = 'Thief';
@@ -533,8 +533,8 @@ io.on('connection', (socket) => {
             if (gameState.passedPlayers.length === numPossibleBlockers) {
                 // --- SMUGGLING SUCCEEDS UNCHALLENGED ---
                 const actor = gameState.players.find(p => p.id === actorId);
-                actor.coins += 2;
-                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name}'s Smuggling succeeds. They gain 2 coins.`);
+                actor.ducats += 2;
+                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name}'s Smuggling succeeds. They gain 2 ducats.`);
 
                 // Reset for the next turn
                 gameState.phase = 'action';
@@ -563,7 +563,7 @@ io.on('connection', (socket) => {
         const initialPlayerStates = room.players.map(player => ({
             id: player.id,
             name: player.name,
-            coins: 2,
+            ducats: 2,
             cards: [shuffledDeck.pop(), shuffledDeck.pop()], // Deal 2 cards to each player
             isAlive: true,
             revealedCards: []
