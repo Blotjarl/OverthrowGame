@@ -40,6 +40,14 @@ function shuffle(array) {
   return array;
 }
 
+function getTimeStamp() {
+    const date = new Date();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+    return `[${hours}:${minutes}:${seconds}]`;
+}
+
 function generateRoomId() {
     return uuidv4().substring(0,6).toUpperCase(); // Generate a short room ID
 }
@@ -64,16 +72,16 @@ io.on('connection', (socket) => {
         // Reveal the card and check for elimination
         if (cardIndex > -1) {
             player.revealedCards.push(player.cards.splice(cardIndex, 1)[0]);
-            gameState.actionLog.push(`${player.name} reveals their ${cardName}.`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${player.name} reveals their ${cardName}.`);
 
             if (player.cards.length === 0) {
                 player.isAlive = false;
-                gameState.actionLog.push(`${player.name} has been eliminated!`);
+                gameState.actionLog.unshift(`${getTimeStamp()} ${player.name} has been eliminated!`);
                 const alivePlayers = gameState.players.filter(p => p.isAlive);
                 if (alivePlayers.length === 1) {
                     const winner = alivePlayers[0];
                     gameState.phase = 'game_over';
-                    gameState.actionLog.push(`${winner.name} is the last one standing and wins the game!`);
+                    gameState.actionLog.unshift(`${getTimeStamp()} ${winner.name} is the last one standing and wins the game!`);
                     io.to(roomId).emit('gameUpdate', gameState);
                     return; // Game over
                 }
@@ -85,8 +93,8 @@ io.on('connection', (socket) => {
 
         // Check if the original action should now proceed
         if ((reason === 'Failed Challenge' || reason === 'Caught Bluffing Block') && pendingAction) {
-            gameState.actionLog.push(`The original action (${pendingAction.action}) now proceeds.`);
-            
+            gameState.actionLog.unshift(`${getTimeStamp()} The original action (${pendingAction.action}) now proceeds.`);
+
             const actor = gameState.players.find(p => p.id === pendingAction.actorId);
             const target = gameState.players.find(p => p.id === pendingAction.targetId);
 
@@ -95,7 +103,7 @@ io.on('connection', (socket) => {
                     const coinsToSteal = Math.min(target.coins, 2);
                     actor.coins += coinsToSteal;
                     target.coins -= coinsToSteal;
-                    gameState.actionLog.push(`${actor.name} thieves ${coinsToSteal} coins from ${target.name}.`);
+                    gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} thieves ${coinsToSteal} coins from ${target.name}.`);
                     break;
                 case 'attack':
                     actor.coins -= 3;
@@ -105,7 +113,7 @@ io.on('connection', (socket) => {
                     break;
                 case 'levy':
                     actor.coins += 3;
-                    gameState.actionLog.push(`${actor.name} gains 3 coins from Levy.`);
+                    gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} gains 3 coins from Levy.`);
                     break;
             }
         }
@@ -137,7 +145,7 @@ io.on('connection', (socket) => {
         if (!responder || !responder.isAlive || responder.id === blockerId) return;
 
         if (response === 'challenge') {
-            gameState.actionLog.push(`${responder.name} challenges ${blocker.name}'s block!`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${responder.name} challenges ${blocker.name}'s block!`);
 
             // --- FIX IS HERE: Check for blockingCard ---
             const hasBlockCard = Array.isArray(blockingCard)
@@ -146,11 +154,11 @@ io.on('connection', (socket) => {
 
             if (hasBlockCard) {
                 // --- BLOCK CHALLENGE FAILED ---
-                gameState.actionLog.push(`${blocker.name} reveals a valid block card! The challenge fails.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} ${blocker.name} reveals a valid block card! The challenge fails.`);
                 gameState.phase = 'reveal_card';
                 gameState.playerToReveal = { id: responder.id, reason: 'Failed Block Challenge' };
-                gameState.actionLog.push(`The original action is blocked.`);
-                
+                gameState.actionLog.unshift(`${getTimeStamp()} The original action is blocked.`);
+
                 // --- FIX IS HERE: Find the correct blockingCard to reveal ---
                 const cardToReveal = Array.isArray(blockingCard)
                     ? blockingCard.find(card => blocker.cards.includes(card))
@@ -159,11 +167,11 @@ io.on('connection', (socket) => {
                 blocker.cards.splice(cardIndex, 1);
                 gameState.deck.unshift(cardToReveal);
                 blocker.cards.push(gameState.deck.pop());
-                gameState.actionLog.push(`${blocker.name} returns their card to the deck and draws a new one.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} ${blocker.name} returns their card to the deck and draws a new one.`);
 
             } else {
                 // --- BLOCK CHALLENGE SUCCEEDED ---
-                gameState.actionLog.push(`${blocker.name} was bluffing the block! The challenge succeeds.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} ${blocker.name} was bluffing the block! The challenge succeeds.`);
                 gameState.phase = 'reveal_card';
                 gameState.playerToReveal = { id: blocker.id, reason: 'Caught Bluffing Block' };
 
@@ -174,7 +182,7 @@ io.on('connection', (socket) => {
                     const coinsToSteal = Math.min(blocker.coins, 2);
                     originalActor.coins += coinsToSteal;
                     blocker.coins -= coinsToSteal;
-                    gameState.actionLog.push(`${originalActor.name}'s thieve succeeds, taking ${coinsToSteal} coins from ${blocker.name}.`);
+                    gameState.actionLog.unshift(`${getTimeStamp()} ${originalActor.name}'s thieve succeeds, taking ${coinsToSteal} coins from ${blocker.name}.`);
                 }
             }
 
@@ -182,11 +190,11 @@ io.on('connection', (socket) => {
             if (!gameState.passedPlayers.includes(responderId)) {
                 gameState.passedPlayers.push(responderId);
             }
-            gameState.actionLog.push(`${responder.name} does not challenge the block.`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${responder.name} does not challenge the block.`);
 
             const numPossibleChallengers = gameState.players.filter(p => p.isAlive && p.id !== blockerId).length;
             if (gameState.passedPlayers.length === numPossibleChallengers) {
-                gameState.actionLog.push(`The block is not challenged and succeeds. The original action is cancelled.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} The block is not challenged and succeeds. The original action is cancelled.`);
                 gameState.phase = 'action';
                 gameState = advanceTurn(gameState);
             }
@@ -232,11 +240,11 @@ io.on('connection', (socket) => {
                 'exchange': 'Courtier'
             }[action.toLowerCase()];
 
-            gameState.actionLog.push(`${challenger.name} challenges ${actor.name}'s claim to be a ${requiredCard}!`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${challenger.name} challenges ${actor.name}'s claim to be a ${requiredCard}!`);
 
             if (actor.cards.includes(requiredCard)) {
                 // CHALLENGE FAILED
-                gameState.actionLog.push(`${actor.name} reveals a ${requiredCard}! The challenge fails.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} reveals a ${requiredCard}! The challenge fails.`);
                 gameState.phase = 'reveal_card';
                 gameState.playerToReveal = { id: challenger.id, reason: 'Failed Challenge' };
                 // Actor's action still needs to be resolved after the reveal. We will handle this later.
@@ -245,10 +253,10 @@ io.on('connection', (socket) => {
                 actor.cards.splice(cardIndex, 1);
                 gameState.deck.push(requiredCard);
                 actor.cards.push(gameState.deck.pop());
-                gameState.actionLog.push(`${actor.name} shuffles their card back into the deck and draws a new one.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} shuffles their card back into the deck and draws a new one.`);
             } else {
                 // CHALLENGE SUCCEEDED
-                gameState.actionLog.push(`${actor.name} was bluffing! The challenge succeeds.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} was bluffing! The challenge succeeds.`);
                 gameState.phase = 'reveal_card';
                 gameState.playerToReveal = { id: actor.id, reason: 'Caught Bluffing' };
                 // Action is cancelled, turn will advance after reveal.
@@ -259,13 +267,13 @@ io.on('connection', (socket) => {
 
         } else if (response === 'pass') {
             gameState.passedPlayers.push(responderId);
-            gameState.actionLog.push(`${responder.name} does not challenge.`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${responder.name} does not challenge.`);
             
             // Check if all other living players have passed
             const numPossibleChallengers = gameState.players.filter(p => p.isAlive && p.id !== actorId).length;
 
             if (gameState.passedPlayers.length === numPossibleChallengers) {
-                gameState.actionLog.push(`The action is not challenged.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} The action is not challenged.`);
                 
                 const blockableActions = ['attack', 'thieve', 'smuggle_goods'];
 
@@ -277,7 +285,7 @@ io.on('connection', (socket) => {
                     const actor = gameState.players.find(p => p.id === actorId);
                     if (action.toLowerCase() === 'levy') {
                         actor.coins += 3;
-                        gameState.actionLog.push(`${actor.name} gains 3 coins from Levy.`);
+                        gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} gains 3 coins from Levy.`);
                     }
                     if (action.toLowerCase() === 'exchange') {
                         gameState.phase = 'exchange_cards';
@@ -330,8 +338,8 @@ io.on('connection', (socket) => {
         
         // Return the other cards to the bottom of the deck
         gameState.deck.unshift(...returnedCards);
-        
-        gameState.actionLog.push(`${player.name} completes their exchange.`);
+
+        gameState.actionLog.unshift(`${getTimeStamp()} ${player.name} completes their exchange.`);
 
         // Reset and advance turn
         gameState.phase = 'action';
@@ -359,7 +367,7 @@ io.on('connection', (socket) => {
 
         if (blockType === 'No Block') {
             // --- The action succeeds because it was not blocked ---
-            gameState.actionLog.push(`${blocker.name} does not block the ${originalAction}.`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${blocker.name} does not block the ${originalAction}.`);
             
             // Resolve the original action (e.g., the steal)
             const actor = gameState.players.find(p => p.id === gameState.pendingAction.actorId);
@@ -368,7 +376,7 @@ io.on('connection', (socket) => {
                 const coinsToSteal = Math.min(blocker.coins, 2);
                 actor.coins += coinsToSteal;
                 blocker.coins -= coinsToSteal;
-                gameState.actionLog.push(`${actor.name} thieves ${coinsToSteal} coins from ${blocker.name}.`);
+                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name} thieves ${coinsToSteal} coins from ${blocker.name}.`);
 
 
                 // Reset for the next turn
@@ -386,8 +394,8 @@ io.on('connection', (socket) => {
 
         } else {
             // --- The player IS declaring a block ---
-            gameState.actionLog.push(`${blocker.name} claims to have a ${blockType} to block the ${originalAction}!`);
-            
+            gameState.actionLog.unshift(`${getTimeStamp()} ${blocker.name} claims to have a ${blockType} to block the ${originalAction}!`);
+
             // Move to a new phase where this block can be challenged
             gameState.phase = 'block_challenge';
             gameState.pendingBlock = {
@@ -417,7 +425,7 @@ io.on('connection', (socket) => {
             if (player.coins < 7) return; 
             player.coins -= 7;
             const target = gameState.players.find(p => p.id === targetId);
-            gameState.actionLog.push(`${player.name} pays 7 coins to Overthrow ${target.name}! This cannot be blocked.`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${player.name} pays 7 coins to Overthrow ${target.name}! This cannot be blocked.`);
             gameState.phase = 'reveal_card';
             gameState.playerToReveal = { id: targetId, reason: 'Overthrown' };
             io.to(roomId).emit('gameUpdate', gameState);
@@ -427,7 +435,7 @@ io.on('connection', (socket) => {
         // --- THIS IS THE CORRECTED BLOCK ---
         if (action === 'harvest_crop') { // Corrected from 'income'
             player.coins += 1;
-            gameState.actionLog.push(`${player.name} Harvests Crop.`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${player.name} Harvests Crop.`);
             gameState = advanceTurn(gameState);
             io.to(roomId).emit('gameUpdate', gameState);
             return; 
@@ -472,7 +480,7 @@ io.on('connection', (socket) => {
                 targetId: targetId,
                 requiredCard: requiredCard
             };
-            gameState.actionLog.push(logMessage);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${logMessage}`);
             io.to(roomId).emit('gameUpdate', gameState);
         } 
         else if (action === 'smuggle_goods') { 
@@ -482,7 +490,7 @@ io.on('connection', (socket) => {
                 actorId: player.id,
                 actorName: player.name
             };
-            gameState.actionLog.push(logMessage);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${logMessage}`);
             io.to(roomId).emit('gameUpdate', gameState);
         }
     });
@@ -501,7 +509,7 @@ io.on('connection', (socket) => {
 
         if (response === 'block') {
             // --- A player is claiming to have a Tax Collector to block ---
-            gameState.actionLog.push(`${responder.name} claims to have a Tax Collector to BLOCK the Smuggle Goods!`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${responder.name} claims to have a Tax Collector to BLOCK the Smuggle Goods!`);
 
             // Move to a new phase where this block can be challenged
             gameState.phase = 'block_challenge';
@@ -517,7 +525,7 @@ io.on('connection', (socket) => {
             if (!gameState.passedPlayers.includes(responderId)) {
                 gameState.passedPlayers.push(responderId);
             }
-            gameState.actionLog.push(`${responder.name} does not block.`);
+            gameState.actionLog.unshift(`${getTimeStamp()} ${responder.name} does not block.`);
 
             // Check if all other living players have passed
             const numPossibleBlockers = gameState.players.filter(p => p.isAlive && p.id !== actorId).length;
@@ -526,8 +534,8 @@ io.on('connection', (socket) => {
                 // --- SMUGGLING SUCCEEDS UNCHALLENGED ---
                 const actor = gameState.players.find(p => p.id === actorId);
                 actor.coins += 2;
-                gameState.actionLog.push(`${actor.name}'s Smuggling succeeds. They gain 2 coins.`);
-                
+                gameState.actionLog.unshift(`${getTimeStamp()} ${actor.name}'s Smuggling succeeds. They gain 2 coins.`);
+
                 // Reset for the next turn
                 gameState.phase = 'action';
                 gameState.pendingAction = null;
@@ -639,8 +647,8 @@ io.on('connection', (socket) => {
         } while (!gameState.players[nextPlayerIndex].isAlive);
 
         gameState.currentPlayerIndex = nextPlayerIndex;
-        gameState.actionLog.push(`It is now ${gameState.players[nextPlayerIndex].name}'s turn.`);
-        
+        gameState.actionLog.unshift(`${getTimeStamp()} It is now ${gameState.players[nextPlayerIndex].name}'s turn.`);
+
         return gameState;
     }
 });
