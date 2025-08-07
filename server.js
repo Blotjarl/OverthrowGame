@@ -8,7 +8,8 @@ const io = new Server(server);
 const { v4: uuidv4 } = require('uuid');
 
 // Serve all static files (index.html, images, etc.) from the 'public' directory
-app.use(express.static('public'));
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
 
 const CARDS = ['Tax Collector', 'Warrior', 'Thief', 'Courtier', 'Defender'];
 const DECK = [];
