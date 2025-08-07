@@ -145,10 +145,11 @@
             background: #4a2c2a;
             padding: 15px;
             border: 2px solid #1a1a1a;
+            
         }
 
         #action-log {
-            height: 500px;
+            height: 400px;
             overflow-y: auto;
             border-top: 1px solid #d2b48c;
             padding-top: 10px;
@@ -190,6 +191,19 @@
             width: 20px; /* Adjust size as needed */
             height: 20px;
         }
+
+        #chat-area {
+            margin-top: 20px;
+            border-top: 1px solid #d2b48c;
+            padding-top: 10px;
+        }
+        #chat-input {
+            width: calc(100% - 22px); /* Adjust for padding and border */
+        }
+        #send-chat-btn {
+            width: 100%;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -221,6 +235,11 @@
         <div id="sidebar">
             <h4>Action Log</h4>
             <div id="action-log"></div>
+            <div id="chat-area">
+                <h4>Chat</h4>
+                <input type="text" id="chat-input" placeholder="Type a message...">
+                <button id="send-chat-btn" onclick="sendChatMessage()">Send</button>
+            </div>
         </div>
     </div>
 
@@ -249,6 +268,17 @@
             document.getElementById('game-container').style.display = 'flex';
             renderGameState();
         });
+
+        function sendChatMessage() {
+            const chatInput = document.getElementById('chat-input');
+            const message = chatInput.value.trim();
+
+            if (message) {
+                // Send the message to the server
+                socket.emit('chatMessage', { roomId: currentRoom, message: message });
+                chatInput.value = ''; // Clear the input box
+            }
+        }
 
         function revealCard(cardName) {
             socket.emit('revealCard', { roomId: currentRoom, cardName: cardName });

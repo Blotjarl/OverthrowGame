@@ -57,6 +57,24 @@ io.on('connection', (socket) => {
 
     let currentRoom = null;
 
+    socket.on('chatMessage', ({ roomId, message }) => {
+        const room = rooms[roomId];
+        if (!room || !room.gameState) return;
+
+        const player = room.gameState.players.find(p => p.id === socket.id);
+        if (!player) return;
+
+        // Sanitize message to prevent HTML injection (basic example)
+        const sanitizedMessage = message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        // Format the message and add it to the log
+        const chatLogEntry = `${getTimeStamp()} <strong>${player.name}:</strong> ${sanitizedMessage}`;
+        room.gameState.actionLog.unshift(chatLogEntry);
+
+        // Broadcast the updated game state to everyone
+        io.to(roomId).emit('gameUpdate', room.gameState);
+    });
+
     socket.on('revealCard', ({ roomId, cardName }) => {
         const room = rooms[roomId];
         if (!room || !room.gameState || room.gameState.phase !== 'reveal_card') return;
