@@ -204,6 +204,60 @@
             width: 100%;
             margin-top: 5px;
         }
+
+        /* --- NEW CSS FOR RULES MODAL --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); /* Dark overlay */
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            width: 80%;
+            max-width: 800px;
+            height: 80%;
+            background-color: #2a2a2a; /* Match the body background */
+            border: 2px solid #d2b48c; /* Gold border */
+            border-radius: 4px;
+            padding: 20px;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+        }
+        .close-button {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 35px;
+            font-weight: bold;
+            color: #d2b48c;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .close-button:hover {
+            color: #fff;
+        }
+        #rules-container {
+            /* This will be filled by the content of rules.html */
+        }
+        /* --- NEW CSS for Lobby Header --- */
+        .lobby-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px; /* Keeps the space below the header */
+        }
+
+        .lobby-header button {
+            width: auto; /* Prevents the button from stretching full-width */
+            margin-bottom: 0;
+        }
     </style>
 </head>
 <body>
@@ -211,7 +265,10 @@
     <h2 style="text-align: center;">Overthrow</h2>
 
     <div id="lobby">
-        <h3>Join or Create a Room</h3>
+        <div class="lobby-header">
+            <h3>Join or Create a Room</h3>
+            <button onclick="openRules()">View Rules</button>
+        </div>
         <input id="nameInput" type="text" placeholder="Enter your name">
         <input id="roomInput" type="text" placeholder="Enter room code">
         <button onclick="joinRoom()">Join Room</button>
@@ -222,6 +279,7 @@
         <p id="roomDisplay"></p>
         <ul id="players"></ul>
         <div id="start-game-container"></div> 
+        <button onclick="openRules()">View Rules</button>
         <button onclick="leaveRoom()">Leave Room</button>
     </div>
 
@@ -234,6 +292,7 @@
 
         <div id="sidebar">
             <h4>Action Log</h4>
+            <button onclick="openRules()" style="width: 100%; margin-bottom: 15px;">View Rules</button>
             <div id="action-log"></div>
             <div id="chat-area">
                 <h4>Chat</h4>
@@ -244,6 +303,15 @@
     </div>
 
     <p id="status" style="text-align: center; margin-top: 20px;"></p>
+
+    <div id="rules-modal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeRules()">&times;</span>
+            <div id="rules-container">
+                <!-- Rules content will be loaded here by JavaScript -->
+            </div>
+        </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
@@ -268,7 +336,6 @@
             document.getElementById('game-container').style.display = 'flex';
             renderGameState();
         });
-
         function sendChatMessage() {
             const chatInput = document.getElementById('chat-input');
             const message = chatInput.value.trim();
@@ -279,7 +346,27 @@
                 chatInput.value = ''; // Clear the input box
             }
         }
+        function openRules() {
+            const modal = document.getElementById('rules-modal');
+            const rulesContainer = document.getElementById('rules-container');
+            
+            // Fetch the rules content from the separate file
+            fetch('/rules.html')
+                .then(response => response.text())
+                .then(html => {
+                    rulesContainer.innerHTML = html;
+                    modal.style.display = 'flex'; // This makes the modal visible
+                })
+                .catch(error => {
+                    console.error("Could not load rules:", error);
+                    rulesContainer.innerHTML = "<p>Error: Could not load the rule book.</p>";
+                    modal.style.display = 'flex';
+                });
+        }
 
+        function closeRules() {
+            document.getElementById('rules-modal').style.display = 'none'; // This hides the modal
+        }
         function revealCard(cardName) {
             socket.emit('revealCard', { roomId: currentRoom, cardName: cardName });
         }
