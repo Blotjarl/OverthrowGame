@@ -1,10 +1,39 @@
 const express = require('express');
 const http = require('http');
+
+
+
 const { Server } = require('socket.io');
+const { createClient } = require('redis');
+const { createAdapter } = require('@socket.io/redis-adapter');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    cors: {
+        origin: "*", // Allow all origins for simplicity
+        methods: ["GET", "POST"]
+    }
+});
+
+// Create a Redis client
+const redisClient = createClient({ url: process.env.REDIS_URL });
+
+// Connect the Redis client and set up the adapter
+(async () => {
+    try {
+        await redisClient.connect();
+        const subClient = redisClient.duplicate();
+        io.adapter(createAdapter(redisClient, subClient));
+        console.log('Connected to Redis and using Redis adapter.');
+    } catch (err) {
+        console.error('Failed to connect to Redis', err);
+    }
+})();
+
+
+
+
 const { v4: uuidv4 } = require('uuid');
 
 // Serve all static files (index.html, images, etc.) from the 'public' directory
